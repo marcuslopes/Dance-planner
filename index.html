@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#7c3aed" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Passinho" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <title>Passinho – Dance Class Tracker</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // Show errors on-screen only if React hasn't mounted yet (root is still empty)
+      function showErr(title, detail) {
+        var root = document.getElementById('root')
+        if (root && root.childElementCount === 0) {
+          root.innerHTML =
+            '<div style="padding:20px;color:#f87171;font-family:monospace;font-size:13px;word-break:break-word;background:#0a0a0f;min-height:100vh">' +
+            '<div style="font-size:24px;margin-bottom:12px">' + title + '</div>' +
+            '<pre style="white-space:pre-wrap">' + detail + '</pre>' +
+            '</div>'
+        } else {
+          console.error(title, detail)
+        }
+      }
+      window.onerror = function(msg, src, line, col, err) {
+        showErr('💥 JS error', msg + '\n' + src + ' ' + line + ':' + col + (err ? '\n' + err.stack : ''))
+      }
+      window.onunhandledrejection = function(e) {
+        var r = e.reason
+        var detail = r instanceof Error ? r.stack : JSON.stringify(r, null, 2) || String(r)
+        showErr('💥 Unhandled promise', detail)
+      }
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
