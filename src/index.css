@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+:root {
+  --bg-base: #0a0a0f;
+  --bg-card: #16161f;
+  --bg-elevated: #1e1e2a;
+  --accent: #7c3aed;
+  --accent-light: #a78bfa;
+  --accent-pink: #ec4899;
+  --text-primary: #f1f0ff;
+  --text-secondary: #8b8aa8;
+  --text-muted: #4a4965;
+  --border: #2a2940;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --ring-green: #22c55e;
+  --ring-amber: #f59e0b;
+  --ring-red: #ef4444;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  overflow: hidden;
+  /* Prevent text selection on tap */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection inside inputs and text areas */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  /* svh = stable viewport height — doesn't resize when mobile browser chrome shows/hides */
+  height: 100vh; /* fallback for older browsers */
+  height: 100svh;
+  max-width: 430px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scrollable content areas */
+.scroll-area {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.scroll-area::-webkit-scrollbar {
+  display: none;
+}
+
+/* Progress ring SVG transition */
+.ring-progress {
+  transition: stroke-dashoffset 600ms cubic-bezier(0.25, 0, 0.1, 1);
+  transform-origin: center;
+  transform: rotate(-90deg);
+}
+
+/* Card entrance animation */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes bounceIn {
+  0%   { transform: scale(0.8); opacity: 0; }
+  60%  { transform: scale(1.08); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes confetti-fall {
+  to { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+.animate-slide-up  { animation: slideUp 350ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in   { animation: fadeIn 200ms ease both; }
+.animate-scale-in  { animation: scaleIn 300ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-bounce-in { animation: bounceIn 400ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.sheet-enter       { animation: sheet-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
