@@ -1,9 +1,10 @@
 import { create } from 'zustand'
 import type { Package, AttendanceRecord, Currency, ExchangeRateCache } from '../types'
 import {
-  sbGetPackages, sbPutPackage, sbDeletePackage,
-  sbGetAttendance, sbPutAttendance, sbDeleteAttendance,
-} from '../lib/supabase'
+  initSpreadsheet, getSheetIds,
+  gsGetPackages, gsPutPackage, gsDeletePackage,
+  gsGetAttendance, gsPutAttendance, gsDeleteAttendance,
+} from '../lib/googleSheets'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
 
@@ -11,6 +12,11 @@ interface AppState {
   // Data
   packages: Package[]
   attendance: AttendanceRecord[]
+  // Auth / Google
+  googleToken: string | null
+  spreadsheetId: string | null
+  pkgSheetId: number
+  attSheetId: number
   // UI
   displayCurrency: Currency
   rates: ExchangeRateCache
@@ -21,7 +27,8 @@ interface AppState {
   activePackageId: string | null
 
   // Actions
-  init(): Promise<void>
+  signIn(token: string): Promise<void>
+  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
   archivePackage(id: string): Promise<void>
@@ -57,23 +64,38 @@ export function progressPercent(attendance: AttendanceRecord[], pkg: Package): n
 export const useAppStore = create<AppState>((set, get) => ({
   packages: [],
   attendance: [],
+  googleToken: null,
+  spreadsheetId: null,
+  pkgSheetId: 0,
+  attSheetId: 1,
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
-  isLoading: true,
+  isLoading: false,
   isFormOpen: false,
   editingPackage: null,
   activePackageId: null,
 
-  async init() {
+  async signIn(token) {
+    set({ isLoading: true })
+    const spreadsheetId = await initSpreadsheet(token)
+    const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
+    set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
+    await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
+  },
+
+  async init(token, spreadsheetId, pkgSheetId, attSheetId) {
+    set({ isLoading: true })
     const [pkgs, att, currency, rates] = await Promise.all([
-      sbGetPackages(),
-      sbGetAttendance(),
+      gsGetPackages(token, spreadsheetId),
+      gsGetAttendance(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       loadRates(),
     ])
     set({
       packages: pkgs,
       attendance: att,
+      pkgSheetId,
+      attSheetId,
       displayCurrency: currency ?? 'CAD',
       rates,
       isLoading: false,
@@ -81,6 +103,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async addPackage(data) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
     const pkg: Package = {
       ...data,
       id: crypto.randomUUID(),
@@ -88,15 +112,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       updatedAt: Date.now(),
       archivedAt: null,
     }
-    await sbPutPackage(pkg)
+    await gsPutPackage(token, spreadsheetId, pkg)
     set(s => ({ packages: [pkg, ...s.packages] }))
   },
 
   async updatePackage(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
     const pkg = get().packages.find(p => p.id === id)
     if (!pkg) return
     const updated = { ...pkg, ...patch, updatedAt: Date.now() }
-    await sbPutPackage(updated)
+    await gsPutPackage(token, spreadsheetId, updated)
     set(s => ({ packages: s.packages.map(p => p.id === id ? updated : p) }))
   },
 
@@ -105,7 +131,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async deletePackage(id) {
-    await sbDeletePackage(id)
+    const { googleToken: token, spreadsheetId, pkgSheetId } = get()
+    if (!token || !spreadsheetId) return
+    await gsDeletePackage(token, spreadsheetId, pkgSheetId, id)
     set(s => ({
       packages: s.packages.filter(p => p.id !== id),
       attendance: s.attendance.filter(a => a.packageId !== id),
@@ -114,13 +142,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async markAttended(packageId) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) throw new Error('Not signed in')
     const record: AttendanceRecord = {
       id: crypto.randomUUID(),
       packageId,
       attendedAt: Date.now(),
       note: null,
     }
-    await sbPutAttendance(record)
+    await gsPutAttendance(token, spreadsheetId, record)
     set(s => ({ attendance: [record, ...s.attendance] }))
     if ('vibrate' in navigator) navigator.vibrate(40)
     return record
@@ -133,7 +163,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async deleteAttendance(id) {
-    await sbDeleteAttendance(id)
+    const { googleToken: token, spreadsheetId, attSheetId } = get()
+    if (!token || !spreadsheetId) return
+    await gsDeleteAttendance(token, spreadsheetId, attSheetId, id)
     set(s => ({ attendance: s.attendance.filter(a => a.id !== id) }))
   },
 
