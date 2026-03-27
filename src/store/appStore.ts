@@ -77,10 +77,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async signIn(token) {
     set({ isLoading: true })
-    const spreadsheetId = await initSpreadsheet(token)
-    const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
-    set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
-    await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
+    try {
+      const spreadsheetId = await initSpreadsheet(token)
+      const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
+    } catch (err) {
+      console.error('signIn failed:', err)
+      set({ isLoading: false })
+    }
   },
 
   async init(token, spreadsheetId, pkgSheetId, attSheetId) {
