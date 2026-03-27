@@ -104,8 +104,8 @@ export function PackageList() {
         onClick={() => openForm()}
         style={{
           position: 'fixed',
-          bottom: `max(24px, var(--safe-bottom))`,
-          right: 24,
+          bottom: 'calc(64px + env(safe-area-inset-bottom) + 16px)',
+          right: 'max(16px, calc(50vw - 215px + 16px))',
           width: 58, height: 58,
           borderRadius: '50%', border: 'none',
           background: 'linear-gradient(135deg, var(--accent), #6d28d9)',

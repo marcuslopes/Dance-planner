@@ -7,6 +7,7 @@ const CLIENT_ID = '954270548746-t9ifhvm3dvsrpq7p17een7u8bk62jusv.apps.googleuser
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
+  'https://www.googleapis.com/auth/calendar.events',
 ].join(' ')
 
 function LoginScreen() {
@@ -82,9 +83,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     try {
       const raw = localStorage.getItem('gsession')
       if (!raw) return
-      const { token, expiresAt } = JSON.parse(raw)
-      if (Date.now() < expiresAt) {
-        signIn(token)
+      const session = JSON.parse(raw)
+      if (Date.now() < session.expiresAt) {
+        signIn(session.token)
       } else {
         localStorage.removeItem('gsession')
       }
