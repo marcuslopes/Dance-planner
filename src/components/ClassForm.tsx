@@ -113,7 +113,7 @@ const labelStyle: React.CSSProperties = {
 export function ClassForm() {
   const isOpen = useAppStore(s => s.isClassFormOpen)
   const editingClass = useAppStore(s => s.editingClass)
-  const packages = useAppStore(s => s.packages.filter(p => !p.archivedAt))
+  const packages = useAppStore(s => s.packages)
   const closeClassForm = useAppStore(s => s.closeClassForm)
   const addScheduledClass = useAppStore(s => s.addScheduledClass)
   const updateScheduledClass = useAppStore(s => s.updateScheduledClass)
@@ -258,7 +258,7 @@ export function ClassForm() {
             onChange={e => set('packageId', e.target.value)}
           >
             <option value="">— No package —</option>
-            {packages.map(p => (
+            {packages.filter(p => !p.archivedAt).map(p => (
               <option key={p.id} value={p.id}>{p.instructorName} · {p.label}</option>
             ))}
           </select>
