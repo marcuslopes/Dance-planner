@@ -17,6 +17,7 @@ function LoginScreen() {
 
   const login = useGoogleLogin({
     scope: SCOPES,
+    prompt: 'consent',
     onSuccess: response => signIn(response.access_token),
     onError: () => console.error('Google sign-in failed'),
   })
