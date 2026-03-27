@@ -2,7 +2,7 @@ import { type ReactNode } from 'react'
 import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google'
 import { useAppStore } from '../store/appStore'
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string
+const CLIENT_ID = '954270548746-t9ifhvm3dvsrpq7p17een7u8bk62jusv.apps.googleusercontent.com'
 
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
@@ -69,19 +69,6 @@ function LoginScreen() {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const googleToken = useAppStore(s => s.googleToken)
-
-  if (!CLIENT_ID) {
-    return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 28px', textAlign: 'center' }}>
-        <span style={{ fontSize: 44, marginBottom: 16 }}>⚙️</span>
-        <h2 style={{ margin: '0 0 12px', color: 'var(--text-primary)', fontSize: 20, fontWeight: 700 }}>Google not configured</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, lineHeight: 1.6, maxWidth: 320 }}>
-          Add <code style={{ background: 'var(--bg-card)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>VITE_GOOGLE_CLIENT_ID</code>{' '}
-          in your deployment environment variables, then redeploy.
-        </p>
-      </div>
-    )
-  }
 
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
