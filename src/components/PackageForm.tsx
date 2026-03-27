@@ -77,7 +77,6 @@ export function PackageForm() {
       {/* Backdrop */}
       <div
         className="animate-fade-in"
-        onClick={closeForm}
         style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
           zIndex: 40, backdropFilter: 'blur(4px)',
