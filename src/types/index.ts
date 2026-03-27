@@ -42,3 +42,28 @@ export const DANCE_STYLES = [
   'Zouk', 'Salsa', 'Forró', 'Bachata', 'Samba', 'Tango',
   'Ballroom', 'Contemporary', 'Ballet', 'Jazz', 'Hip-Hop', 'Other',
 ] as const
+
+// ── Schedule / Calendar types ─────────────────────────────────────────────────
+
+export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly'
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency
+  daysOfWeek: number[]     // 0=Sun … 6=Sat (used for weekly/biweekly)
+  endDate: number | null   // epoch ms
+  count: number | null     // max occurrences
+}
+
+export interface ScheduledClass {
+  id: string
+  packageId: string | null          // optional link to existing package
+  title: string
+  startTime: number                 // epoch ms
+  endTime: number                   // epoch ms
+  location: string | null
+  recurrence: RecurrenceRule | null
+  googleCalendarEventId: string | null
+  notes: string | null
+  createdAt: number
+  updatedAt: number
+}

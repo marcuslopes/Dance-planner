@@ -1,4 +1,4 @@
-import type { Package, AttendanceRecord } from '../types'
+import type { Package, AttendanceRecord, ScheduledClass } from '../types'
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files'
@@ -39,12 +39,13 @@ export async function initSpreadsheet(token: string): Promise<string> {
     return list.files[0].id as string
   }
 
-  // Create new spreadsheet with both sheets
+  // Create new spreadsheet with all three sheets
   const body = {
     properties: { title: SPREADSHEET_NAME },
     sheets: [
       { properties: { title: 'packages', index: 0 } },
       { properties: { title: 'attendance', index: 1 } },
+      { properties: { title: 'schedule', index: 2 } },
     ],
   }
   const created = await gFetch(SHEETS_BASE, token, { method: 'POST', body: JSON.stringify(body) })
@@ -63,6 +64,10 @@ export async function initSpreadsheet(token: string): Promise<string> {
         {
           range: 'attendance!A1:D1',
           values: [['id', 'package_id', 'attended_at', 'note']],
+        },
+        {
+          range: 'schedule!A1:K1',
+          values: [['id', 'package_id', 'title', 'start_time', 'end_time', 'location', 'recurrence_json', 'google_calendar_event_id', 'notes', 'created_at', 'updated_at']],
         },
       ],
     }),
@@ -177,12 +182,37 @@ async function deleteRow(token: string, spreadsheetId: string, sheetId: number, 
 
 // ── Sheet IDs (needed for row deletion) ──────────────────────────────────────
 
-export async function getSheetIds(token: string, spreadsheetId: string): Promise<{ packages: number; attendance: number }> {
+export async function getSheetIds(token: string, spreadsheetId: string): Promise<{ packages: number; attendance: number; schedule: number }> {
   const data = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
   const sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
+
+  // Add "schedule" sheet if it doesn't exist yet (for existing spreadsheets)
+  const scheduleSheet = sheets.find(s => s.properties.title === 'schedule')
+  if (!scheduleSheet) {
+    await gFetch(`${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, token, {
+      method: 'POST',
+      body: JSON.stringify({
+        requests: [{ addSheet: { properties: { title: 'schedule', index: 2 } } }],
+      }),
+    })
+    await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values/schedule!A1:K1?valueInputOption=RAW`, token, {
+      method: 'PUT',
+      body: JSON.stringify({ values: [['id', 'package_id', 'title', 'start_time', 'end_time', 'location', 'recurrence_json', 'google_calendar_event_id', 'notes', 'created_at', 'updated_at']] }),
+    })
+    // Re-fetch to get new sheet ID
+    const refreshed = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
+    const refreshedSheets = refreshed.sheets as Array<{ properties: { title: string; sheetId: number } }>
+    return {
+      packages: refreshedSheets.find(s => s.properties.title === 'packages')?.properties.sheetId ?? 0,
+      attendance: refreshedSheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
+      schedule: refreshedSheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
+    }
+  }
+
   return {
     packages: sheets.find(s => s.properties.title === 'packages')?.properties.sheetId ?? 0,
     attendance: sheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
+    schedule: scheduleSheet.properties.sheetId,
   }
 }
 
@@ -214,4 +244,51 @@ export async function gsPutAttendance(token: string, spreadsheetId: string, att:
 
 export async function gsDeleteAttendance(token: string, spreadsheetId: string, attSheetId: number, id: string): Promise<void> {
   await deleteRow(token, spreadsheetId, attSheetId, 'attendance', id)
+}
+
+// ── Schedule ──────────────────────────────────────────────────────────────────
+
+function rowToSchedule(row: string[]): ScheduledClass {
+  return {
+    id: row[0],
+    packageId: row[1] || null,
+    title: row[2],
+    startTime: Number(row[3]),
+    endTime: Number(row[4]),
+    location: row[5] || null,
+    recurrence: row[6] ? JSON.parse(row[6]) : null,
+    googleCalendarEventId: row[7] || null,
+    notes: row[8] || null,
+    createdAt: Number(row[9]),
+    updatedAt: Number(row[10]),
+  }
+}
+
+function scheduleToRow(cls: ScheduledClass): string[] {
+  return [
+    cls.id,
+    cls.packageId ?? '',
+    cls.title,
+    String(cls.startTime),
+    String(cls.endTime),
+    cls.location ?? '',
+    cls.recurrence ? JSON.stringify(cls.recurrence) : '',
+    cls.googleCalendarEventId ?? '',
+    cls.notes ?? '',
+    String(cls.createdAt),
+    String(cls.updatedAt),
+  ]
+}
+
+export async function gsGetSchedule(token: string, spreadsheetId: string): Promise<ScheduledClass[]> {
+  const rows = await getRows(token, spreadsheetId, 'schedule')
+  return rows.filter(r => r[0]).map(rowToSchedule).sort((a, b) => a.startTime - b.startTime)
+}
+
+export async function gsPutSchedule(token: string, spreadsheetId: string, cls: ScheduledClass): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'schedule', 'K', scheduleToRow(cls), cls.id)
+}
+
+export async function gsDeleteSchedule(token: string, spreadsheetId: string, schedSheetId: number, id: string): Promise<void> {
+  await deleteRow(token, spreadsheetId, schedSheetId, 'schedule', id)
 }

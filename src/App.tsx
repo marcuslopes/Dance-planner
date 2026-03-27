@@ -3,7 +3,11 @@ import { Toaster } from 'react-hot-toast'
 import { PackageList } from './components/PackageList'
 import { PackageDetail } from './components/PackageDetail'
 import { PackageForm } from './components/PackageForm'
+import { ScheduleTab } from './components/ScheduleTab'
+import { ClassForm } from './components/ClassForm'
+import { BottomNav } from './components/BottomNav'
 import { AuthGate } from './components/AuthGate'
+import { useAppStore } from './store/appStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -26,11 +30,16 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 function AppInner() {
+  const activeTab = useAppStore(s => s.activeTab)
+
   return (
     <>
-      <PackageList />
+      {activeTab === 'packages' && <PackageList />}
+      {activeTab === 'schedule' && <ScheduleTab />}
       <PackageDetail />
       <PackageForm />
+      <ClassForm />
+      <BottomNav />
       <Toaster
         position="top-center"
         toastOptions={{
