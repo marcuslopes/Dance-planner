@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import toast from 'react-hot-toast'
 import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass } from '../types'
 import {
   initSpreadsheet, getSheetIds,
@@ -235,7 +236,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         googleCalendarEventId = await gcCreateEvent(token, data)
       } catch (err) {
-        console.warn('Google Calendar sync failed (will save locally):', err)
+        console.warn('Google Calendar sync failed:', err)
+        toast.error('Could not add to Google Calendar. Sign out and sign back in to grant calendar access, then try again.', { duration: 6000 })
       }
     }
 
@@ -263,11 +265,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (updated.googleCalendarEventId) {
           await gcUpdateEvent(token, updated.googleCalendarEventId, updated)
         } else {
-          // Class didn't have a calendar event — create one now
           updated.googleCalendarEventId = await gcCreateEvent(token, updated)
         }
       } catch (err) {
         console.warn('Google Calendar sync failed:', err)
+        toast.error('Could not sync with Google Calendar. Sign out and sign back in to grant calendar access, then try again.', { duration: 6000 })
       }
     }
 

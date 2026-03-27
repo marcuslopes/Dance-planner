@@ -63,7 +63,7 @@ function initFormState(cls?: ScheduledClass | null): FormState {
       endType: rule?.endDate ? 'date' : rule?.count ? 'count' : 'none',
       endDate: rule?.endDate ? toLocalDateString(rule.endDate) : '',
       count: rule?.count ? String(rule.count) : '',
-      addToCalendar: !!cls.googleCalendarEventId,
+      addToCalendar: true,
     }
   }
   const start = defaultStart()
