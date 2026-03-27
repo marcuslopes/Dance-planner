@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google'
 import { useAppStore } from '../store/appStore'
 
@@ -76,6 +76,22 @@ function LoginScreen() {
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const googleToken = useAppStore(s => s.googleToken)
+  const signIn = useAppStore(s => s.signIn)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('gsession')
+      if (!raw) return
+      const { token, expiresAt } = JSON.parse(raw)
+      if (Date.now() < expiresAt) {
+        signIn(token)
+      } else {
+        localStorage.removeItem('gsession')
+      }
+    } catch {
+      localStorage.removeItem('gsession')
+    }
+  }, [])
 
   return (
     <GoogleOAuthProvider clientId={CLIENT_ID}>
