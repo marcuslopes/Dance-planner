@@ -85,18 +85,21 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
       />
 
       {/* Detail sheet */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        display: 'flex', justifyContent: 'center',
+        zIndex: 50, pointerEvents: 'none',
+      }}>
       <div
         className="sheet-enter"
         style={{
-          position: 'fixed', bottom: 0, left: '50%',
-          transform: 'translateX(-50%)',
           width: '100%', maxWidth: 430,
           background: 'var(--bg-elevated)',
           borderRadius: '24px 24px 0 0',
-          zIndex: 50,
           paddingBottom: 'max(24px, var(--safe-bottom))',
           maxHeight: '92dvh',
           display: 'flex', flexDirection: 'column',
+          pointerEvents: 'auto',
         }}
       >
         {/* Drag handle + close */}
@@ -243,6 +246,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
             </button>
           </div>
         )}
+      </div>
       </div>
     </>
   )
