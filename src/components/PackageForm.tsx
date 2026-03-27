@@ -74,38 +74,43 @@ export function PackageForm() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Full-screen modal */}
       <div
         className="animate-fade-in"
         style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-          zIndex: 40, backdropFilter: 'blur(4px)',
-        }}
-      />
-      {/* Sheet */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        display: 'flex', justifyContent: 'center',
-        zIndex: 50, pointerEvents: 'none',
-      }}>
-      <div
-        className="sheet-enter"
-        style={{
-          width: '100%', maxWidth: 430,
-          background: 'var(--bg-elevated)',
-          borderRadius: '24px 24px 0 0',
-          paddingBottom: 'max(24px, var(--safe-bottom))',
-          maxHeight: '92dvh',
+          position: 'fixed', inset: 0,
+          background: 'var(--bg-base)',
+          zIndex: 50,
           overflowY: 'auto',
-          pointerEvents: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
-        {/* Drag handle */}
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--text-muted)' }} />
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: 'max(16px, var(--safe-top)) 20px 16px',
+          borderBottom: '1px solid var(--border)',
+          position: 'sticky', top: 0,
+          background: 'var(--bg-base)',
+          zIndex: 1,
+        }}>
+          <button
+            type="button"
+            onClick={closeForm}
+            style={{
+              background: 'none', border: 'none', color: 'var(--text-secondary)',
+              fontSize: 16, cursor: 'pointer', padding: '4px 0',
+            }}
+          >
+            Cancel
+          </button>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {editingPackage ? 'Edit package' : 'New package'}
+          </h2>
+          <div style={{ width: 56 }} />
         </div>
 
-        <form onSubmit={handleSubmit} style={{ padding: '8px 24px 0' }}>
+        <form onSubmit={handleSubmit} style={{ padding: '24px 20px', maxWidth: 430, margin: '0 auto' }}>
           <h2 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
             {editingPackage ? 'Edit package' : 'New class package'}
           </h2>
@@ -113,7 +118,6 @@ export function PackageForm() {
           {/* Instructor name */}
           <Field label="Instructor name">
             <input
-              autoFocus
               type="text"
               value={instructorName}
               onChange={e => setInstructorName(e.target.value)}
@@ -218,7 +222,6 @@ export function PackageForm() {
             {saving ? 'Saving…' : editingPackage ? 'Save changes' : 'Start package'}
           </button>
         </form>
-      </div>
       </div>
     </>
   )
