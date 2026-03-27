@@ -1,6 +1,5 @@
-import { useEffect, Component, type ReactNode, type ErrorInfo } from 'react'
+import { Component, type ReactNode, type ErrorInfo } from 'react'
 import { Toaster } from 'react-hot-toast'
-import { useAppStore } from './store/appStore'
 import { PackageList } from './components/PackageList'
 import { PackageDetail } from './components/PackageDetail'
 import { PackageForm } from './components/PackageForm'
@@ -27,14 +26,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 
 function AppInner() {
-  const init = useAppStore(s => s.init)
-
-  useEffect(() => {
-    init().catch(err => {
-      console.error('init failed:', err)
-    })
-  }, [init])
-
   return (
     <>
       <PackageList />
