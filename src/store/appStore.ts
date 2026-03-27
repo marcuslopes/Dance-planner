@@ -82,6 +82,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const spreadsheetId = await initSpreadsheet(token)
       const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
+      // Persist session — Google access tokens last ~1 hour
+      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
       set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
       await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
     } catch (err) {
