@@ -12,6 +12,7 @@ const SCOPES = [
 function LoginScreen() {
   const signIn = useAppStore(s => s.signIn)
   const isLoading = useAppStore(s => s.isLoading)
+  const signInError = useAppStore(s => s.signInError)
 
   const login = useGoogleLogin({
     scope: SCOPES,
@@ -60,7 +61,13 @@ function LoginScreen() {
         Sign in with Google
       </button>
 
-      <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 24, maxWidth: 280 }}>
+      {signInError && (
+        <p style={{ textAlign: 'center', fontSize: 12, color: '#f87171', marginTop: 16, maxWidth: 300, wordBreak: 'break-word' }}>
+          {signInError}
+        </p>
+      )}
+
+      <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', marginTop: 16, maxWidth: 280 }}>
         Your data is saved to a Google Sheet in your own Drive. No account needed beyond Google.
       </p>
     </div>

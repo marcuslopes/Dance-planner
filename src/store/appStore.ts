@@ -21,6 +21,7 @@ interface AppState {
   displayCurrency: Currency
   rates: ExchangeRateCache
   isLoading: boolean
+  signInError: string | null
   // Modal state
   isFormOpen: boolean
   editingPackage: Package | null
@@ -71,16 +72,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
+  signInError: null,
   isFormOpen: false,
   editingPackage: null,
   activePackageId: null,
 
   async signIn(token) {
     set({ isLoading: true })
-    const spreadsheetId = await initSpreadsheet(token)
-    const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
-    set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
-    await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
+    try {
+      const spreadsheetId = await initSpreadsheet(token)
+      const { packages: pkgSheetId, attendance: attSheetId } = await getSheetIds(token, spreadsheetId)
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
+    } catch (err) {
+      console.error('signIn failed:', err)
+      set({ isLoading: false, signInError: err instanceof Error ? err.message : String(err) })
+    }
   },
 
   async init(token, spreadsheetId, pkgSheetId, attSheetId) {
