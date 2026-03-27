@@ -21,6 +21,7 @@ interface AppState {
   displayCurrency: Currency
   rates: ExchangeRateCache
   isLoading: boolean
+  signInError: string | null
   // Modal state
   isFormOpen: boolean
   editingPackage: Package | null
@@ -71,6 +72,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
+  signInError: null,
   isFormOpen: false,
   editingPackage: null,
   activePackageId: null,
@@ -84,7 +86,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().init(token, spreadsheetId, pkgSheetId, attSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
-      set({ isLoading: false })
+      set({ isLoading: false, signInError: err instanceof Error ? err.message : String(err) })
     }
   },
 
