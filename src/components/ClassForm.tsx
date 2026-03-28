@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
-import { useAppStore } from '../store/appStore'
+import { useAppStore, classesUsed } from '../store/appStore'
 import type { RecurrenceFrequency, RecurrenceRule, ScheduledClass } from '../types'
 
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -114,6 +114,7 @@ export function ClassForm() {
   const isOpen = useAppStore(s => s.isClassFormOpen)
   const editingClass = useAppStore(s => s.editingClass)
   const packages = useAppStore(s => s.packages)
+  const attendance = useAppStore(s => s.attendance)
   const closeClassForm = useAppStore(s => s.closeClassForm)
   const addScheduledClass = useAppStore(s => s.addScheduledClass)
   const updateScheduledClass = useAppStore(s => s.updateScheduledClass)
@@ -148,6 +149,12 @@ export function ClassForm() {
         ? f.daysOfWeek.filter(d => d !== day)
         : [...f.daysOfWeek, day].sort(),
     }))
+  }
+
+  function getRemainingForPackage(pkgId: string): string {
+    const pkg = packages.find(p => p.id === pkgId)
+    if (!pkg) return '1'
+    return String(Math.max(1, pkg.totalClasses - classesUsed(attendance, pkgId)))
   }
 
   function buildRecurrence(): RecurrenceRule | null {
@@ -256,10 +263,13 @@ export function ClassForm() {
                 const titleIsPristine =
                   !prev.title.trim() ||
                   (previousPkg != null && prev.title.trim() === previousPkg.label)
+                const shouldAutoFillCount =
+                  newPkgId && prev.recurrenceEnabled && prev.endType === 'count'
                 return {
                   ...prev,
                   packageId: newPkgId,
                   title: titleIsPristine ? (newPkg?.label ?? '') : prev.title,
+                  count: shouldAutoFillCount ? getRemainingForPackage(newPkgId) : prev.count,
                 }
               })
             }}
@@ -337,7 +347,16 @@ export function ClassForm() {
             <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>Recurrence</span>
             <button
               type="button"
-              onClick={() => set('recurrenceEnabled', !form.recurrenceEnabled)}
+              onClick={() => {
+                const enabling = !form.recurrenceEnabled
+                setForm(prev => ({
+                  ...prev,
+                  recurrenceEnabled: enabling,
+                  count: enabling && prev.packageId && prev.endType === 'count'
+                    ? getRemainingForPackage(prev.packageId)
+                    : prev.count,
+                }))
+              }}
               style={{
                 width: 40, height: 22, borderRadius: 11,
                 background: form.recurrenceEnabled ? '#7c3aed' : 'var(--border)',
@@ -413,7 +432,15 @@ export function ClassForm() {
                         type="radio"
                         name="endType"
                         checked={form.endType === type}
-                        onChange={() => set('endType', type)}
+                        onChange={() => {
+                          setForm(prev => ({
+                            ...prev,
+                            endType: type,
+                            count: type === 'count' && prev.packageId && prev.recurrenceEnabled
+                              ? getRemainingForPackage(prev.packageId)
+                              : prev.count,
+                          }))
+                        }}
                         style={{ accentColor: '#7c3aed', width: 16, height: 16 }}
                       />
                       <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>
