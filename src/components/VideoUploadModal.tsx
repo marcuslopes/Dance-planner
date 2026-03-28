@@ -84,7 +84,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
           </div>
 
           {/* Scrollable content */}
-          <div className="scroll-area" style={{ flex: 1, padding: '16px 24px 8px' }}>
+          <div className="scroll-area" style={{ flex: 1, minHeight: 0, padding: '16px 24px 8px' }}>
             <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
               Upload class video
             </h3>
