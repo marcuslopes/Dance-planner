@@ -32,15 +32,26 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
 
-  // Map each attendance record to videos on the same calendar day
-  const pkgAttendance = getAttendanceForPackage(attendance, pkg.id)
+  // Assign each video to exactly one attendance record: same calendar day, closest timestamp.
+  // This prevents a video from appearing under every class row on the same date.
+  const videoToRecId = new Map<string, string>()
+  for (const vid of pkgVideos) {
+    let bestRec: (typeof pkgAttendance)[0] | null = null
+    let bestDiff = Infinity
+    for (const rec of pkgAttendance) {
+      if (isSameDay(new Date(rec.attendedAt), new Date(vid.attendedAt))) {
+        const diff = Math.abs(rec.attendedAt - vid.attendedAt)
+        if (diff < bestDiff) { bestDiff = diff; bestRec = rec }
+      }
+    }
+    if (bestRec) videoToRecId.set(vid.id, bestRec.id)
+  }
+
   const videosByRecId = new Map<string, VideoRecord[]>()
   for (const rec of pkgAttendance) {
-    videosByRecId.set(rec.id,
-      pkgVideos.filter(v => isSameDay(new Date(rec.attendedAt), new Date(v.attendedAt))))
+    videosByRecId.set(rec.id, pkgVideos.filter(v => videoToRecId.get(v.id) === rec.id))
   }
-  const orphanedVideos = pkgVideos.filter(vid =>
-    !pkgAttendance.some(r => isSameDay(new Date(r.attendedAt), new Date(vid.attendedAt))))
+  const orphanedVideos = pkgVideos.filter(v => !videoToRecId.has(v.id))
 
   const used = classesUsed(attendance, pkg.id)
   const remaining = pkg.totalClasses - used
