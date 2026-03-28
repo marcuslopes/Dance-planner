@@ -102,19 +102,24 @@ async function getOrCreateFolder(token: string, name: string, parentId?: string)
   const q = encodeURIComponent(
     `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentClause}`
   )
-  const list = await fetch(
+  const listResp = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
     { headers: { Authorization: `Bearer ${token}` } }
-  ).then(r => r.json()) as { files?: { id: string }[] }
+  )
+  if (!listResp.ok) throw new Error(`Drive folder search failed ${listResp.status}: ${await listResp.text()}`)
+  const list = await listResp.json() as { files?: { id: string }[] }
   if (list.files?.length) return list.files[0].id
 
   const body: Record<string, unknown> = { name, mimeType: 'application/vnd.google-apps.folder' }
   if (parentId) body.parents = [parentId]
-  const created = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+  const createResp = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }).then(r => r.json()) as { id: string }
+  })
+  if (!createResp.ok) throw new Error(`Drive folder create failed ${createResp.status}: ${await createResp.text()}`)
+  const created = await createResp.json() as { id: string }
+  if (!created.id) throw new Error('Drive folder create returned no ID')
   return created.id
 }
 
