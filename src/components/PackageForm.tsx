@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useAppStore } from '../store/appStore'
+import { useAppStore, getUniqueTeachers } from '../store/appStore'
 import { CARD_COLORS, DANCE_STYLES, type Currency } from '../types'
 import toast from 'react-hot-toast'
 
 export function PackageForm() {
-  const { isFormOpen, editingPackage, closeForm, addPackage, updatePackage } = useAppStore()
+  const { isFormOpen, editingPackage, prefilledInstructor, closeForm, addPackage, updatePackage, packages } = useAppStore()
+  const existingTeachers = getUniqueTeachers(packages)
 
   const [instructorName, setInstructorName] = useState('')
   const [label, setLabel] = useState('')
@@ -24,7 +25,7 @@ export function PackageForm() {
         setBaseCurrency(editingPackage.baseCurrency)
         setColor(editingPackage.color)
       } else {
-        setInstructorName('')
+        setInstructorName(prefilledInstructor ?? '')
         setLabel('')
         setTotalClasses(10)
         setPriceAmount('')
@@ -32,7 +33,7 @@ export function PackageForm() {
         setColor(CARD_COLORS[Math.floor(Math.random() * CARD_COLORS.length)] as string)
       }
     }
-  }, [isFormOpen, editingPackage])
+  }, [isFormOpen, editingPackage, prefilledInstructor])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -119,12 +120,16 @@ export function PackageForm() {
           <Field label="Instructor name">
             <input
               type="text"
+              list="teacher-names"
               value={instructorName}
               onChange={e => setInstructorName(e.target.value)}
               placeholder="e.g. Ana, Marcos…"
               required
               style={inputStyle}
             />
+            <datalist id="teacher-names">
+              {existingTeachers.map(t => <option key={t} value={t} />)}
+            </datalist>
           </Field>
 
           {/* Dance style */}
