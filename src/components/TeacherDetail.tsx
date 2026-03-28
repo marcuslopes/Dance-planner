@@ -100,7 +100,6 @@ function TeacherDetailInner({ teacherName, onClose }: { teacherName: string; onC
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
             maxHeight: '88dvh',
             display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
@@ -122,9 +121,11 @@ function TeacherDetailInner({ teacherName, onClose }: { teacherName: string; onC
               <div style={{
                 width: 44, height: 44, borderRadius: 14,
                 background: 'var(--accent)', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', fontSize: 20,
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: 18, fontWeight: 800, color: '#fff',
+                letterSpacing: '-0.02em', flexShrink: 0,
               }}>
-                👤
+                {teacherName.slice(0, 2).toUpperCase()}
               </div>
               <div>
                 <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -170,7 +171,7 @@ function TeacherDetailInner({ teacherName, onClose }: { teacherName: string; onC
           </div>
 
           {/* Add package CTA */}
-          <div style={{ padding: '16px 20px 0' }}>
+          <div style={{ padding: '16px 20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', flexShrink: 0 }}>
             <button
               onClick={handleAddPackage}
               style={{
