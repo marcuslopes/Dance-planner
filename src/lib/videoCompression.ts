@@ -15,11 +15,12 @@ async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     ffmpeg.on('log', ({ message }) => onLog(message))
   }
 
-  // Load from CDN (unpkg); the toBlobURL call caches via service-worker-friendly blob URLs
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
+  // Multi-threaded core — uses all CPU cores via SharedArrayBuffer (COOP/COEP headers are set)
+  const baseURL = 'https://unpkg.com/@ffmpeg/core-mt@0.12.6/dist/esm'
   await ffmpeg.load({
     coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
     wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    workerURL: await toBlobURL(`${baseURL}/ffmpeg-core.worker.js`, 'text/javascript'),
   })
 
   ffmpegInstance = ffmpeg
@@ -90,6 +91,7 @@ export async function compressVideo(
   await ffmpeg.exec([
     '-i', inputName,
     '-c:v', 'libx264',
+    '-preset', 'ultrafast',
     '-b:v', `${videoBitrateKbps}k`,
     '-maxrate', `${videoBitrateKbps * 2}k`,
     '-bufsize', `${videoBitrateKbps * 4}k`,
