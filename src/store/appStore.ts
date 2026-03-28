@@ -13,7 +13,7 @@ import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalend
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
-import { compressVideo, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
+import { compressVideo, preloadFFmpeg, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
 
 interface AppState {
   // Data
@@ -186,6 +186,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
+    // Pre-warm FFmpeg WASM in the background so it's ready when needed
+    preloadFFmpeg()
   },
 
   async addPackage(data) {

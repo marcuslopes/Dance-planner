@@ -36,6 +36,11 @@ async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
   return ffmpeg
 }
 
+/** Call this early (e.g. after sign-in) to warm up the WASM in the background. */
+export function preloadFFmpeg(): void {
+  getFFmpeg().catch(() => { /* ignore — will retry on actual upload */ })
+}
+
 /**
  * Reads video duration (in seconds) by loading the file's metadata in a
  * temporary <video> element. Returns null if the browser can't decode it.
