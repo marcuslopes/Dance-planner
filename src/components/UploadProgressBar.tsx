@@ -12,7 +12,7 @@ export function UploadProgressBar() {
 
   return (
     <div style={{
-      position: 'fixed', bottom: 72, left: 0, right: 0,
+      position: 'fixed', bottom: 'calc(72px + max(8px, env(safe-area-inset-bottom, 0px)))', left: 0, right: 0,
       display: 'flex', justifyContent: 'center',
       zIndex: 55, pointerEvents: 'none',
     }}>
