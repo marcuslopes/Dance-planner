@@ -8,6 +8,7 @@ import { SettingsTab } from './components/SettingsTab'
 import { ClassForm } from './components/ClassForm'
 import { BottomNav } from './components/BottomNav'
 import { AuthGate } from './components/AuthGate'
+import { UploadProgressBar } from './components/UploadProgressBar'
 import { useAppStore } from './store/appStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -42,6 +43,7 @@ function AppInner() {
       <PackageForm />
       <ClassForm />
       <BottomNav />
+      <UploadProgressBar />
       <Toaster
         position="top-center"
         toastOptions={{

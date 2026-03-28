@@ -500,7 +500,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`Upload failed: ${msg.slice(0, 120)}`, { duration: 8000 })
-      throw err
     } finally {
       set({ isVideoUploading: false, videoUploadProgress: 0 })
     }
