@@ -4,6 +4,7 @@ import { PackageList } from './components/PackageList'
 import { PackageDetail } from './components/PackageDetail'
 import { PackageForm } from './components/PackageForm'
 import { ScheduleTab } from './components/ScheduleTab'
+import { SettingsTab } from './components/SettingsTab'
 import { ClassForm } from './components/ClassForm'
 import { BottomNav } from './components/BottomNav'
 import { AuthGate } from './components/AuthGate'
@@ -36,6 +37,7 @@ function AppInner() {
     <>
       {activeTab === 'packages' && <PackageList />}
       {activeTab === 'schedule' && <ScheduleTab />}
+      {activeTab === 'settings' && <SettingsTab />}
       <PackageDetail />
       <PackageForm />
       <ClassForm />

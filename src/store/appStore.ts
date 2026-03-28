@@ -9,6 +9,7 @@ import {
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
+import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
 
 interface AppState {
@@ -35,7 +36,9 @@ interface AppState {
   isClassFormOpen: boolean
   editingClass: ScheduledClass | null
   // Tab navigation
-  activeTab: 'packages' | 'schedule'
+  activeTab: 'packages' | 'schedule' | 'settings'
+  // Settings
+  autoCompleteClasses: boolean
 
   // Actions
   signIn(token: string): Promise<void>
@@ -58,7 +61,9 @@ interface AppState {
   deleteScheduledClass(id: string): Promise<void>
   openClassForm(cls?: ScheduledClass): void
   closeClassForm(): void
-  setActiveTab(tab: 'packages' | 'schedule'): void
+  setActiveTab(tab: 'packages' | 'schedule' | 'settings'): void
+  setAutoCompleteClasses(value: boolean): Promise<void>
+  _runAutoComplete(): Promise<void>
 }
 
 // Derived helpers (pure, no store)
@@ -98,6 +103,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isClassFormOpen: false,
   editingClass: null,
   activeTab: 'packages',
+  autoCompleteClasses: false,
 
   async signIn(token) {
     set({ isLoading: true })
@@ -116,12 +122,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, currency, rates] = await Promise.all([
+    const [pkgs, att, schedule, currency, rates, autoComplete] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       loadRates(),
+      dbGetSetting<boolean>('autoCompleteClasses'),
     ])
     set({
       packages: pkgs,
@@ -132,8 +139,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       schedSheetId,
       displayCurrency: currency ?? 'CAD',
       rates,
+      autoCompleteClasses: autoComplete ?? false,
       isLoading: false,
     })
+    if (autoComplete) await get()._runAutoComplete()
   },
 
   async addPackage(data) {
@@ -234,7 +243,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     let googleCalendarEventId: string | null = null
     if (addToCalendar) {
       try {
-        googleCalendarEventId = await gcCreateEvent(token, data)
+        const calPkg = data.packageId ? get().packages.find(p => p.id === data.packageId) ?? null : null
+        const calData = calPkg
+          ? { ...data, title: `${calPkg.label} with ${calPkg.instructorName}` }
+          : data
+        googleCalendarEventId = await gcCreateEvent(token, calData)
       } catch (err) {
         console.warn('Google Calendar sync failed:', err)
         toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
@@ -262,10 +275,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (syncCalendar && token) {
       try {
+        const calPkg = updated.packageId ? get().packages.find(p => p.id === updated.packageId) ?? null : null
+        const calData = calPkg
+          ? { ...updated, title: `${calPkg.label} with ${calPkg.instructorName}` }
+          : updated
         if (updated.googleCalendarEventId) {
-          await gcUpdateEvent(token, updated.googleCalendarEventId, updated)
+          await gcUpdateEvent(token, updated.googleCalendarEventId, calData)
         } else {
-          updated.googleCalendarEventId = await gcCreateEvent(token, updated)
+          updated.googleCalendarEventId = await gcCreateEvent(token, calData)
         }
       } catch (err) {
         console.warn('Google Calendar sync failed:', err)
@@ -308,5 +325,46 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveTab(tab) {
     set({ activeTab: tab })
+  },
+
+  async setAutoCompleteClasses(value) {
+    await dbSetSetting('autoCompleteClasses', value)
+    set({ autoCompleteClasses: value })
+    if (value) await get()._runAutoComplete()
+  },
+
+  async _runAutoComplete() {
+    const { googleToken: token, spreadsheetId, scheduledClasses, attendance } = get()
+    if (!token || !spreadsheetId) return
+
+    const now = Date.now()
+    const newRecords: AttendanceRecord[] = []
+
+    for (const cls of scheduledClasses) {
+      if (!cls.packageId) continue
+      const occurrences = expandOccurrences(cls, now)
+      for (const occTs of occurrences) {
+        const noteKey = `__auto__:${cls.id}:${occTs}`
+        const alreadyExists = attendance.some(a => a.note === noteKey) ||
+          newRecords.some(a => a.note === noteKey)
+        if (alreadyExists) continue
+        const record: AttendanceRecord = {
+          id: crypto.randomUUID(),
+          packageId: cls.packageId,
+          attendedAt: occTs,
+          note: noteKey,
+        }
+        try {
+          await gsPutAttendance(token, spreadsheetId, record)
+          newRecords.push(record)
+        } catch (err) {
+          console.warn('Auto-complete attendance write failed:', err)
+        }
+      }
+    }
+
+    if (newRecords.length > 0) {
+      set(s => ({ attendance: [...newRecords, ...s.attendance].sort((a, b) => b.attendedAt - a.attendedAt) }))
+    }
   },
 }))
