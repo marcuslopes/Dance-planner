@@ -7,10 +7,11 @@ import toast from 'react-hot-toast'
 interface Props {
   packageId: string
   defaultAttendedAt: number
+  lockDate?: boolean
   onClose: () => void
 }
 
-export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Props) {
+export function VideoUploadModal({ packageId, defaultAttendedAt, lockDate, onClose }: Props) {
   const { uploadClassVideo } = useAppStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -93,8 +94,8 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
             Upload class video
           </h3>
 
-          {/* Date picker */}
-          <label style={{ display: 'block', marginBottom: 16 }}>
+          {/* Date picker — hidden when date is locked to a specific class row */}
+          {!lockDate && <label style={{ display: 'block', marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
               Class date
             </div>
@@ -111,7 +112,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
                 boxSizing: 'border-box',
               }}
             />
-          </label>
+          </label>}
 
           {/* Title */}
           <label style={{ display: 'block', marginBottom: 16 }}>
