@@ -133,6 +133,9 @@ export function ClassForm() {
   if (!isOpen) return null
 
   const isEditing = !!editingClass
+  const selectedPkg = form.packageId
+    ? packages.find(p => p.id === form.packageId) ?? null
+    : null
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(f => ({ ...f, [key]: value }))
@@ -159,17 +162,19 @@ export function ClassForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.title.trim()) { toast.error('Title is required'); return }
+    if (!form.packageId && !form.title.trim()) { toast.error('Title is required for classes without a package'); return }
     if (!form.date || !form.startTime || !form.endTime) { toast.error('Date and time are required'); return }
 
     const startTime = combineDateAndTime(form.date, form.startTime)
     const endTime = combineDateAndTime(form.date, form.endTime)
     if (endTime <= startTime) { toast.error('End time must be after start time'); return }
 
+    const effectiveTitle = form.title.trim() || (selectedPkg?.label ?? '')
+
     setSaving(true)
     try {
       const data: Omit<ScheduledClass, 'id' | 'createdAt' | 'updatedAt' | 'googleCalendarEventId'> = {
-        title: form.title.trim(),
+        title: effectiveTitle,
         packageId: form.packageId || null,
         startTime,
         endTime,
@@ -237,31 +242,46 @@ export function ClassForm() {
       {/* Scrollable form */}
       <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-        {/* Title */}
-        <div>
-          <label style={labelStyle}>Class title *</label>
-          <input
-            style={inputStyle}
-            placeholder="e.g. Zouk with Ana"
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-            required
-          />
-        </div>
-
         {/* Link to package */}
         <div>
           <label style={labelStyle}>Link to package (optional)</label>
           <select
             style={{ ...inputStyle, appearance: 'none' }}
             value={form.packageId}
-            onChange={e => set('packageId', e.target.value)}
+            onChange={e => {
+              const newPkgId = e.target.value
+              setForm(prev => {
+                const newPkg = newPkgId ? packages.find(p => p.id === newPkgId) : null
+                const previousPkg = prev.packageId ? packages.find(p => p.id === prev.packageId) : null
+                const titleIsPristine =
+                  !prev.title.trim() ||
+                  (previousPkg != null && prev.title.trim() === previousPkg.label)
+                return {
+                  ...prev,
+                  packageId: newPkgId,
+                  title: titleIsPristine ? (newPkg?.label ?? '') : prev.title,
+                }
+              })
+            }}
           >
             <option value="">— No package —</option>
             {packages.filter(p => !p.archivedAt).map(p => (
               <option key={p.id} value={p.id}>{p.instructorName} · {p.label}</option>
             ))}
           </select>
+        </div>
+
+        {/* Title */}
+        <div>
+          <label style={labelStyle}>
+            Class title{selectedPkg ? ' (optional)' : ' *'}
+          </label>
+          <input
+            style={inputStyle}
+            placeholder={selectedPkg ? `Defaults to "${selectedPkg.label}"` : 'e.g. Zouk with Ana'}
+            value={form.title}
+            onChange={e => set('title', e.target.value)}
+          />
         </div>
 
         {/* Date */}
