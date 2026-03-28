@@ -3,12 +3,11 @@ import { useAppStore } from '../store/appStore'
 export function UploadProgressBar() {
   const isVideoUploading = useAppStore(s => s.isVideoUploading)
   const progress = useAppStore(s => s.videoUploadProgress)
+  const status = useAppStore(s => s.videoUploadStatus)
 
   if (!isVideoUploading) return null
 
-  const label = progress < 70
-    ? `Compressing… ${progress}%`
-    : `Uploading to Drive… ${progress}%`
+  const label = status ? `${status} ${progress > 0 ? `${progress}%` : ''}`.trim() : `${progress}%`
 
   return (
     <div style={{

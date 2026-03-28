@@ -13,7 +13,7 @@ import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalend
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
-import { compressVideo, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
+import { compressVideo, preloadFFmpeg, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
 
 interface AppState {
   // Data
@@ -46,6 +46,7 @@ interface AppState {
   autoCompleteClasses: boolean
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
+  videoUploadStatus: string
 
   // Actions
   signIn(token: string): Promise<void>
@@ -118,6 +119,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   autoCompleteClasses: false,
   isVideoUploading: false,
   videoUploadProgress: 0,
+  videoUploadStatus: '',
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -184,6 +186,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
+    // Pre-warm FFmpeg WASM in the background so it's ready when needed
+    preloadFFmpeg()
   },
 
   async addPackage(data) {
@@ -428,15 +432,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const pkg = packages.find(p => p.id === packageId)
     if (!pkg) throw new Error('Package not found')
 
-    set({ isVideoUploading: true, videoUploadProgress: 0 })
+    set({ isVideoUploading: true, videoUploadProgress: 0, videoUploadStatus: 'Loading compressor…' })
 
     try {
       // 1. Compress to ≤5 MB
       const compressed = await compressVideo(file, VIDEO_SIZE_LIMIT_MB, pct => {
-        set({ videoUploadProgress: Math.round(pct * 0.7) }) // compression = 0–70%
+        set({ videoUploadProgress: Math.round(pct * 0.7), videoUploadStatus: 'Compressing…' })
       })
 
-      set({ videoUploadProgress: 75 })
+      set({ videoUploadProgress: 75, videoUploadStatus: 'Uploading to Drive…' })
 
       // 2. Build multipart/related body for Drive upload
       const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
@@ -501,7 +505,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`Upload failed: ${msg.slice(0, 120)}`, { duration: 8000 })
     } finally {
-      set({ isVideoUploading: false, videoUploadProgress: 0 })
+      set({ isVideoUploading: false, videoUploadProgress: 0, videoUploadStatus: '' })
     }
   },
 
