@@ -15,6 +15,8 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [attendedAt, setAttendedAt] = useState<number>(defaultAttendedAt)
+  const [title, setTitle] = useState('')
+  const [notes, setNotes] = useState('')
 
   function toDateValue(ts: number) {
     return new Date(ts).toISOString().slice(0, 10)
@@ -39,7 +41,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
 
   function handleUpload() {
     if (!file) return
-    void uploadClassVideo(packageId, file, attendedAt)
+    void uploadClassVideo(packageId, file, attendedAt, title, notes)
     onClose()
   }
 
@@ -107,6 +109,50 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
                 color: 'var(--text-primary)',
                 fontSize: 15,
                 boxSizing: 'border-box',
+              }}
+            />
+          </label>
+
+          {/* Title */}
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
+              Title <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+            </div>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Footwork practice"
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 12,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                fontSize: 15,
+                boxSizing: 'border-box',
+              }}
+            />
+          </label>
+
+          {/* Notes */}
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
+              Class notes <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional)</span>
+            </div>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="What happened in this class?"
+              rows={3}
+              style={{
+                width: '100%', padding: '10px 14px', borderRadius: 12,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                fontSize: 15,
+                resize: 'vertical',
+                boxSizing: 'border-box',
+                fontFamily: 'inherit',
               }}
             />
           </label>

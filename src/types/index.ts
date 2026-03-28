@@ -9,6 +9,8 @@ export interface VideoRecord {
   uploadedAt: number       // epoch ms
   filename: string
   sizeBytes: number
+  title: string            // display name; empty = fall back to date
+  notes: string            // free-form class notes
 }
 
 export interface Package {

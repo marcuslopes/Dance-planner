@@ -76,8 +76,8 @@ export async function initSpreadsheet(token: string): Promise<string> {
           values: [['key', 'value']],
         },
         {
-          range: 'videos!A1:H1',
-          values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']],
+          range: 'videos!A1:J1',
+          values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes', 'title', 'notes']],
         },
       ],
     }),
@@ -221,7 +221,7 @@ export async function getSheetIds(
       headerData.push({ range: 'settings!A1:B1', values: [['key', 'value']] })
     }
     if (missing.includes('videos')) {
-      headerData.push({ range: 'videos!A1:H1', values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']] })
+      headerData.push({ range: 'videos!A1:J1', values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes', 'title', 'notes']] })
     }
     if (headerData.length > 0) {
       await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
@@ -353,6 +353,8 @@ function rowToVideo(row: string[]): VideoRecord {
     uploadedAt: Number(row[5]),
     filename: row[6],
     sizeBytes: Number(row[7]),
+    title: row[8] ?? '',
+    notes: row[9] ?? '',
   }
 }
 
@@ -366,6 +368,8 @@ function videoToRow(v: VideoRecord): string[] {
     String(v.uploadedAt),
     v.filename,
     String(v.sizeBytes),
+    v.title,
+    v.notes,
   ]
 }
 
@@ -375,7 +379,7 @@ export async function gsGetVideos(token: string, spreadsheetId: string): Promise
 }
 
 export async function gsPutVideo(token: string, spreadsheetId: string, video: VideoRecord): Promise<void> {
-  await upsertRow(token, spreadsheetId, 'videos', 'H', videoToRow(video), video.id)
+  await upsertRow(token, spreadsheetId, 'videos', 'J', videoToRow(video), video.id)
 }
 
 export async function gsDeleteVideo(

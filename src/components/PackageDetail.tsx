@@ -6,8 +6,9 @@ import { format } from 'date-fns'
 import { Trash2, Pencil, X, Undo2, Video, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
-import type { Package } from '../types'
+import type { Package, VideoRecord } from '../types'
 import { VideoUploadModal } from './VideoUploadModal'
+import { VideoEditModal } from './VideoEditModal'
 
 // Guard wrapper — renders nothing when no package is active
 export function PackageDetail() {
@@ -26,6 +27,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
   } = useAppStore()
   const prevUsed = useRef<number | null>(null)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
+  const [editingVideo, setEditingVideo] = useState<VideoRecord | null>(null)
 
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
@@ -257,22 +259,27 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {pkgVideos.map((vid, i) => (
                     <div key={vid.id} style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '9px 0',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                      padding: '10px 0',
                       borderBottom: i < pkgVideos.length - 1 ? '1px solid var(--border)' : 'none',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                        <Video size={16} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
+                        <Video size={16} style={{ color: '#7c3aed', flexShrink: 0, marginTop: 2 }} />
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {format(vid.attendedAt, 'MMM d, yyyy')}
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                            {vid.title || format(vid.attendedAt, 'MMM d, yyyy')}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {(vid.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                            {format(vid.attendedAt, 'MMM d, yyyy')} · {(vid.sizeBytes / 1024 / 1024).toFixed(1)} MB
                           </div>
+                          {vid.notes ? (
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
+                              {vid.notes.length > 80 ? vid.notes.slice(0, 80) + '…' : vid.notes}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: 4 }}>
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                         <a
                           href={vid.driveWebViewLink}
                           target="_blank"
@@ -281,6 +288,12 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                         >
                           <ExternalLink size={14} />
                         </a>
+                        <button
+                          onClick={() => setEditingVideo(vid)}
+                          style={iconBtn}
+                        >
+                          <Pencil size={14} />
+                        </button>
                         <button
                           onClick={() => deleteVideo(vid.id)}
                           style={{ ...iconBtn, color: 'var(--danger)' }}
@@ -326,6 +339,14 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
           packageId={pkg.id}
           defaultAttendedAt={pkgAttendance[0]?.attendedAt ?? Date.now()}
           onClose={() => setShowVideoUpload(false)}
+        />
+      )}
+
+      {/* Video edit modal */}
+      {editingVideo && (
+        <VideoEditModal
+          video={editingVideo}
+          onClose={() => setEditingVideo(null)}
         />
       )}
     </>

@@ -73,7 +73,8 @@ interface AppState {
   setActiveTab(tab: 'packages' | 'schedule' | 'settings'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
   _runAutoComplete(): Promise<void>
-  uploadClassVideo(packageId: string, file: File, attendedAt: number): Promise<void>
+  uploadClassVideo(packageId: string, file: File, attendedAt: number, title?: string, notes?: string): Promise<void>
+  updateVideo(id: string, patch: { title?: string; notes?: string }): Promise<void>
   deleteVideo(id: string): Promise<void>
 }
 
@@ -453,7 +454,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  async uploadClassVideo(packageId, file, attendedAt) {
+  async uploadClassVideo(packageId, file, attendedAt, title = '', notes = '') {
     const { googleToken, spreadsheetId, packages } = get()
     if (!googleToken || !spreadsheetId) throw new Error('Not signed in')
 
@@ -476,7 +477,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const pkgFolderId = await getOrCreateFolder(googleToken, pkgFolderName, appFolderId)
 
       // 3. Build multipart/related body for Drive upload
-      const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
+      const dateSlug = new Date(attendedAt).toISOString().slice(0, 10)
+      const filename = title.trim() ? `${title.trim()}.mp4` : `class-${dateSlug}.mp4`
       const metadata = JSON.stringify({ name: filename, mimeType: 'video/mp4', parents: [pkgFolderId] })
       const boundary = 'dance_planner_boundary'
       const enc = new TextEncoder()
@@ -529,6 +531,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         uploadedAt: Date.now(),
         filename,
         sizeBytes: compressed.size,
+        title: title.trim(),
+        notes: notes.trim(),
       }
       await gsPutVideo(googleToken, spreadsheetId, record)
       set(s => ({ videos: [record, ...s.videos], videoUploadProgress: 100 }))
@@ -540,6 +544,33 @@ export const useAppStore = create<AppState>((set, get) => ({
     } finally {
       set({ isVideoUploading: false, videoUploadProgress: 0, videoUploadStatus: '' })
     }
+  },
+
+  async updateVideo(id, patch) {
+    const { googleToken, spreadsheetId, videos } = get()
+    if (!googleToken || !spreadsheetId) return
+    const video = videos.find(v => v.id === id)
+    if (!video) return
+
+    const updated: VideoRecord = { ...video, ...patch }
+
+    // Rename the Drive file if title changed
+    if (patch.title !== undefined && video.driveFileId) {
+      const newFilename = patch.title.trim() ? `${patch.title.trim()}.mp4` : video.filename
+      updated.filename = newFilename
+      try {
+        await fetch(`https://www.googleapis.com/drive/v3/files/${video.driveFileId}?fields=id`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${googleToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newFilename }),
+        })
+      } catch (err) {
+        console.warn('Drive rename failed:', err)
+      }
+    }
+
+    await gsPutVideo(googleToken, spreadsheetId, updated)
+    set(s => ({ videos: s.videos.map(v => v.id === id ? updated : v) }))
   },
 
   async deleteVideo(id) {
