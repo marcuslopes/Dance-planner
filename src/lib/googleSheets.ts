@@ -39,13 +39,14 @@ export async function initSpreadsheet(token: string): Promise<string> {
     return list.files[0].id as string
   }
 
-  // Create new spreadsheet with all three sheets
+  // Create new spreadsheet with all four sheets
   const body = {
     properties: { title: SPREADSHEET_NAME },
     sheets: [
       { properties: { title: 'packages', index: 0 } },
       { properties: { title: 'attendance', index: 1 } },
       { properties: { title: 'schedule', index: 2 } },
+      { properties: { title: 'settings', index: 3 } },
     ],
   }
   const created = await gFetch(SHEETS_BASE, token, { method: 'POST', body: JSON.stringify(body) })
@@ -68,6 +69,10 @@ export async function initSpreadsheet(token: string): Promise<string> {
         {
           range: 'schedule!A1:K1',
           values: [['id', 'package_id', 'title', 'start_time', 'end_time', 'location', 'recurrence_json', 'google_calendar_event_id', 'notes', 'created_at', 'updated_at']],
+        },
+        {
+          range: 'settings!A1:B1',
+          values: [['key', 'value']],
         },
       ],
     }),
@@ -184,35 +189,45 @@ async function deleteRow(token: string, spreadsheetId: string, sheetId: number, 
 
 export async function getSheetIds(token: string, spreadsheetId: string): Promise<{ packages: number; attendance: number; schedule: number }> {
   const data = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
-  const sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
+  let sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
 
-  // Add "schedule" sheet if it doesn't exist yet (for existing spreadsheets)
-  const scheduleSheet = sheets.find(s => s.properties.title === 'schedule')
-  if (!scheduleSheet) {
+  // Provision missing sheets (schedule and settings) for existing spreadsheets
+  const missing: string[] = []
+  if (!sheets.find(s => s.properties.title === 'schedule')) missing.push('schedule')
+  if (!sheets.find(s => s.properties.title === 'settings')) missing.push('settings')
+
+  if (missing.length > 0) {
     await gFetch(`${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, token, {
       method: 'POST',
       body: JSON.stringify({
-        requests: [{ addSheet: { properties: { title: 'schedule', index: 2 } } }],
+        requests: missing.map((title, i) => ({
+          addSheet: { properties: { title, index: sheets.length + i } },
+        })),
       }),
     })
-    await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values/schedule!A1:K1?valueInputOption=RAW`, token, {
-      method: 'PUT',
-      body: JSON.stringify({ values: [['id', 'package_id', 'title', 'start_time', 'end_time', 'location', 'recurrence_json', 'google_calendar_event_id', 'notes', 'created_at', 'updated_at']] }),
-    })
-    // Re-fetch to get new sheet ID
-    const refreshed = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
-    const refreshedSheets = refreshed.sheets as Array<{ properties: { title: string; sheetId: number } }>
-    return {
-      packages: refreshedSheets.find(s => s.properties.title === 'packages')?.properties.sheetId ?? 0,
-      attendance: refreshedSheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
-      schedule: refreshedSheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
+    // Write headers for newly added sheets
+    const headerData: { range: string; values: string[][] }[] = []
+    if (missing.includes('schedule')) {
+      headerData.push({ range: 'schedule!A1:K1', values: [['id', 'package_id', 'title', 'start_time', 'end_time', 'location', 'recurrence_json', 'google_calendar_event_id', 'notes', 'created_at', 'updated_at']] })
     }
+    if (missing.includes('settings')) {
+      headerData.push({ range: 'settings!A1:B1', values: [['key', 'value']] })
+    }
+    if (headerData.length > 0) {
+      await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
+        method: 'POST',
+        body: JSON.stringify({ valueInputOption: 'RAW', data: headerData }),
+      })
+    }
+    // Re-fetch to get updated sheet IDs
+    const refreshed = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
+    sheets = refreshed.sheets as Array<{ properties: { title: string; sheetId: number } }>
   }
 
   return {
     packages: sheets.find(s => s.properties.title === 'packages')?.properties.sheetId ?? 0,
     attendance: sheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
-    schedule: scheduleSheet.properties.sheetId,
+    schedule: sheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
   }
 }
 
@@ -291,4 +306,26 @@ export async function gsPutSchedule(token: string, spreadsheetId: string, cls: S
 
 export async function gsDeleteSchedule(token: string, spreadsheetId: string, schedSheetId: number, id: string): Promise<void> {
   await deleteRow(token, spreadsheetId, schedSheetId, 'schedule', id)
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+/** Reads all settings from the sheet. Returns a plain Record of key → parsed value. */
+export async function gsGetSettings(token: string, spreadsheetId: string): Promise<Record<string, unknown>> {
+  const rows = await getRows(token, spreadsheetId, 'settings')
+  const result: Record<string, unknown> = {}
+  for (const row of rows) {
+    if (!row[0]) continue
+    try {
+      result[row[0]] = JSON.parse(row[1])
+    } catch {
+      result[row[0]] = row[1]
+    }
+  }
+  return result
+}
+
+/** Upserts a single setting by key. Value is JSON-serialised. */
+export async function gsPutSetting(token: string, spreadsheetId: string, key: string, value: unknown): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'settings', 'B', [key, JSON.stringify(value)], key)
 }

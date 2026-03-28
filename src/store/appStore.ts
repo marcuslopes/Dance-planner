@@ -6,6 +6,7 @@ import {
   gsGetPackages, gsPutPackage, gsDeletePackage,
   gsGetAttendance, gsPutAttendance, gsDeleteAttendance,
   gsGetSchedule, gsPutSchedule, gsDeleteSchedule,
+  gsGetSettings, gsPutSetting,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
@@ -122,14 +123,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, currency, rates, autoComplete] = await Promise.all([
+    const [pkgs, att, schedule, cloudSettings, localCurrency, localAutoComplete, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
+      gsGetSettings(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
-      loadRates(),
       dbGetSetting<boolean>('autoCompleteClasses'),
+      loadRates(),
     ])
+
+    // Cloud settings win over local IDB; fall back to local then defaults
+    const currency = (cloudSettings['displayCurrency'] as Currency | undefined)
+      ?? localCurrency ?? 'CAD'
+    const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
+      ?? localAutoComplete ?? false
+
+    // Sync cloud values back into IDB so next cold-start is up-to-date
+    await Promise.all([
+      dbSetSetting('displayCurrency', currency),
+      dbSetSetting('autoCompleteClasses', autoComplete),
+    ])
+
     set({
       packages: pkgs,
       attendance: att,
@@ -137,9 +152,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       pkgSheetId,
       attSheetId,
       schedSheetId,
-      displayCurrency: currency ?? 'CAD',
+      displayCurrency: currency,
       rates,
-      autoCompleteClasses: autoComplete ?? false,
+      autoCompleteClasses: autoComplete,
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
@@ -215,6 +230,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   async setDisplayCurrency(c) {
     await dbSetSetting('displayCurrency', c)
     set({ displayCurrency: c })
+    const { googleToken: token, spreadsheetId } = get()
+    if (token && spreadsheetId) {
+      gsPutSetting(token, spreadsheetId, 'displayCurrency', c).catch(err =>
+        console.warn('Failed to sync displayCurrency to Sheets:', err)
+      )
+    }
   },
 
   async refreshRates() {
@@ -330,6 +351,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   async setAutoCompleteClasses(value) {
     await dbSetSetting('autoCompleteClasses', value)
     set({ autoCompleteClasses: value })
+    const { googleToken: token, spreadsheetId } = get()
+    if (token && spreadsheetId) {
+      gsPutSetting(token, spreadsheetId, 'autoCompleteClasses', value).catch(err =>
+        console.warn('Failed to sync autoCompleteClasses to Sheets:', err)
+      )
+    }
     if (value) await get()._runAutoComplete()
   },
 
