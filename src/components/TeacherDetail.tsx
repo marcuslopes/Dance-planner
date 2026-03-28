@@ -100,7 +100,8 @@ function TeacherDetailInner({ teacherName, onClose }: { teacherName: string; onC
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            maxHeight: '88dvh',
+            paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
+            maxHeight: '92dvh',
             display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
           }}
@@ -171,21 +172,24 @@ function TeacherDetailInner({ teacherName, onClose }: { teacherName: string; onC
           </div>
 
           {/* Add package CTA */}
-          <div style={{ padding: '16px 20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', flexShrink: 0 }}>
+          <div style={{ padding: '16px 24px 0' }}>
             <button
               onClick={handleAddPackage}
               style={{
                 width: '100%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                padding: '14px',
-                borderRadius: 14, border: 'none',
+                padding: '16px',
+                borderRadius: 16, border: 'none',
                 background: 'linear-gradient(135deg, var(--accent), #6d28d9)',
                 color: '#fff',
-                fontSize: 15, fontWeight: 700, cursor: 'pointer',
-                boxShadow: '0 4px 20px rgba(124,58,237,0.4)',
+                fontSize: 17, fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 4px 24px rgba(124,58,237,0.5)',
+                transition: 'all 150ms ease',
+                letterSpacing: '0.02em',
+                fontFamily: 'inherit',
               }}
             >
-              <Plus size={18} strokeWidth={2.5} />
+              <Plus size={20} strokeWidth={2.5} />
               Add package for {teacherName}
             </button>
           </div>
