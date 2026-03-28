@@ -102,7 +102,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
           width: '100%', maxWidth: 430,
           background: 'var(--bg-elevated)',
           borderRadius: '24px 24px 0 0',
-          paddingBottom: 'max(24px, var(--safe-bottom))',
+          paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
           maxHeight: '92dvh',
           display: 'flex', flexDirection: 'column',
           pointerEvents: 'auto',

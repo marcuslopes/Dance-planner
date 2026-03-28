@@ -155,7 +155,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
           </div>
 
           {/* Pinned CTA — always visible */}
-          <div style={{ padding: '12px 24px', paddingBottom: 'max(24px, var(--safe-bottom))', flexShrink: 0 }}>
+          <div style={{ padding: '12px 24px', paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))', flexShrink: 0 }}>
             <button
               onClick={handleUpload}
               disabled={!file}
