@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ProgressRing } from './ProgressRing'
 import { useAppStore, classesUsed, progressPercent, pricePerClass, getAttendanceForPackage } from '../store/appStore'
 import { convert, formatCurrency, getRateAge } from '../lib/currency'
-import { format } from 'date-fns'
+import { format, isSameDay } from 'date-fns'
 import { Trash2, Pencil, X, Undo2, Video, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
@@ -26,11 +26,21 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
     videos, deleteVideo,
   } = useAppStore()
   const prevUsed = useRef<number | null>(null)
-  const [showVideoUpload, setShowVideoUpload] = useState(false)
+  const [uploadingForDate, setUploadingForDate] = useState<number | null>(null)
   const [editingVideo, setEditingVideo] = useState<VideoRecord | null>(null)
 
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
+
+  // Map each attendance record to videos on the same calendar day
+  const pkgAttendance = getAttendanceForPackage(attendance, pkg.id)
+  const videosByRecId = new Map<string, VideoRecord[]>()
+  for (const rec of pkgAttendance) {
+    videosByRecId.set(rec.id,
+      pkgVideos.filter(v => isSameDay(new Date(rec.attendedAt), new Date(v.attendedAt))))
+  }
+  const orphanedVideos = pkgVideos.filter(vid =>
+    !pkgAttendance.some(r => isSameDay(new Date(r.attendedAt), new Date(vid.attendedAt))))
 
   const used = classesUsed(attendance, pkg.id)
   const remaining = pkg.totalClasses - used
@@ -40,7 +50,6 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
   const totalConverted = convert(pkg.priceAmount, pkg.baseCurrency, displayCurrency, rates.rates)
   const isComplete = remaining <= 0
   const isArchived = !!pkg.archivedAt
-  const pkgAttendance = getAttendanceForPackage(attendance, pkg.id)
 
   // Confetti on package completion
   useEffect(() => {
@@ -183,8 +192,8 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
             </button>
           )}
 
-          {/* Attendance log */}
-          <div style={{ marginBottom: 8 }}>
+          {/* Class history — merged with videos */}
+          <div style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 Class history
@@ -202,110 +211,135 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                 No classes logged yet
               </p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {pkgAttendance.map((rec, i) => (
-                  <div key={rec.id} className="animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
-                    <div style={{
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: i < pkgAttendance.length - 1 ? '1px solid var(--border)' : 'none',
-                    }}>
-                      <div>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-                          Class #{pkgAttendance.length - i}
-                        </span>
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 10 }}>
-                          {format(rec.attendedAt, 'MMM d, yyyy')}
-                        </span>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {pkgAttendance.map((rec, i) => {
+                  const rowVideos = videosByRecId.get(rec.id) ?? []
+                  const isLast = i === pkgAttendance.length - 1
+                  const showBorder = !isLast
+
+                  return (
+                    <div key={rec.id} className="animate-fade-in" style={{ animationDelay: `${i * 20}ms` }}>
+                      {/* Attendance row */}
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '10px 0',
+                        borderBottom: rowVideos.length === 0 && showBorder ? '1px solid var(--border)' : 'none',
+                      }}>
+                        <div>
+                          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            Class #{pkgAttendance.length - i}
+                          </span>
+                          <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 10 }}>
+                            {format(rec.attendedAt, 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {!isArchived && (
+                            <button
+                              onClick={() => setUploadingForDate(rec.attendedAt)}
+                              style={uploadBtn}
+                              title="Upload video for this class"
+                            >
+                              <Video size={13} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteAttendance(rec.id)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => deleteAttendance(rec.id)}
-                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
-                      >
-                        <X size={14} />
-                      </button>
+
+                      {/* Video sub-rows */}
+                      {rowVideos.map((vid, vi) => (
+                        <div key={vid.id} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                          padding: '7px 0 7px 20px',
+                          borderBottom: vi === rowVideos.length - 1 && showBorder ? '1px solid var(--border)' : 'none',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
+                            <Video size={13} style={{ color: '#7c3aed', flexShrink: 0, marginTop: 3 }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 1 }}>
+                                {vid.title || 'Class video'}
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {(vid.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                              </div>
+                              {vid.notes ? (
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>
+                                  {vid.notes.length > 80 ? vid.notes.slice(0, 80) + '…' : vid.notes}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            <a href={vid.driveWebViewLink} target="_blank" rel="noopener noreferrer" style={{ ...iconBtn, textDecoration: 'none' }}>
+                              <ExternalLink size={13} />
+                            </a>
+                            <button onClick={() => setEditingVideo(vid)} style={iconBtn}>
+                              <Pencil size={13} />
+                            </button>
+                            <button onClick={() => deleteVideo(vid.id)} style={{ ...iconBtn, color: 'var(--danger)' }}>
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
-          </div>
 
-          {/* Class Videos */}
-          <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Class Videos
-                </h3>
-                <button
-                  onClick={() => setShowVideoUpload(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)',
-                    borderRadius: 8, padding: '5px 12px',
-                    color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  <Video size={13} />
-                  Upload
-                </button>
-              </div>
-
-              {pkgVideos.length === 0 ? (
-                <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
-                  No videos yet
-                </p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {pkgVideos.map((vid, i) => (
+            {/* Orphaned videos — uploaded for dates with no matching attendance */}
+            {orphanedVideos.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h4 style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Other videos
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  {orphanedVideos.map((vid, i) => (
                     <div key={vid.id} style={{
                       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
                       padding: '10px 0',
-                      borderBottom: i < pkgVideos.length - 1 ? '1px solid var(--border)' : 'none',
+                      borderBottom: i < orphanedVideos.length - 1 ? '1px solid var(--border)' : 'none',
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flex: 1, minWidth: 0 }}>
-                        <Video size={16} style={{ color: '#7c3aed', flexShrink: 0, marginTop: 2 }} />
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flex: 1, minWidth: 0 }}>
+                        <Video size={14} style={{ color: '#7c3aed', flexShrink: 0, marginTop: 2 }} />
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 1 }}>
                             {vid.title || format(vid.attendedAt, 'MMM d, yyyy')}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             {format(vid.attendedAt, 'MMM d, yyyy')} · {(vid.sizeBytes / 1024 / 1024).toFixed(1)} MB
                           </div>
                           {vid.notes ? (
-                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>
                               {vid.notes.length > 80 ? vid.notes.slice(0, 80) + '…' : vid.notes}
                             </div>
                           ) : null}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        <a
-                          href={vid.driveWebViewLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ ...iconBtn, textDecoration: 'none' }}
-                        >
-                          <ExternalLink size={14} />
+                        <a href={vid.driveWebViewLink} target="_blank" rel="noopener noreferrer" style={{ ...iconBtn, textDecoration: 'none' }}>
+                          <ExternalLink size={13} />
                         </a>
-                        <button
-                          onClick={() => setEditingVideo(vid)}
-                          style={iconBtn}
-                        >
-                          <Pencil size={14} />
+                        <button onClick={() => setEditingVideo(vid)} style={iconBtn}>
+                          <Pencil size={13} />
                         </button>
-                        <button
-                          onClick={() => deleteVideo(vid.id)}
-                          style={{ ...iconBtn, color: 'var(--danger)' }}
-                        >
-                          <X size={14} />
+                        <button onClick={() => deleteVideo(vid.id)} style={{ ...iconBtn, color: 'var(--danger)' }}>
+                          <X size={13} />
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Mark attended CTA */}
@@ -333,12 +367,13 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
       </div>
       </div>
 
-      {/* Video upload modal */}
-      {showVideoUpload && (
+      {/* Video upload modal — tied to a specific class row */}
+      {uploadingForDate !== null && (
         <VideoUploadModal
           packageId={pkg.id}
-          defaultAttendedAt={pkgAttendance[0]?.attendedAt ?? Date.now()}
-          onClose={() => setShowVideoUpload(false)}
+          defaultAttendedAt={uploadingForDate}
+          lockDate
+          onClose={() => setUploadingForDate(null)}
         />
       )}
 
@@ -370,4 +405,10 @@ const iconBtn: React.CSSProperties = {
   background: 'var(--bg-card)', border: '1px solid var(--border)',
   borderRadius: 10, padding: '8px', cursor: 'pointer',
   color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
+const uploadBtn: React.CSSProperties = {
+  background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.25)',
+  borderRadius: 8, padding: '5px 8px', cursor: 'pointer',
+  color: '#a78bfa', display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
