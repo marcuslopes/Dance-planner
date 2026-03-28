@@ -47,6 +47,11 @@ interface AppState {
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
   videoUploadStatus: string
+  // Filters
+  filterTeacher: string | null
+  filterStyle: string | null
+  // Pre-filled instructor for new package form (when opening from TeacherDetail)
+  prefilledInstructor: string | null
 
   // Actions
   signIn(token: string): Promise<void>
@@ -62,7 +67,10 @@ interface AppState {
   setDisplayCurrency(c: Currency): Promise<void>
   refreshRates(): Promise<void>
   openForm(pkg?: Package): void
+  openFormForTeacher(name: string): void
   closeForm(): void
+  setFilterTeacher(name: string | null): void
+  setFilterStyle(style: string | null): void
   setActivePackage(id: string | null): void
   // Schedule actions
   addScheduledClass(data: Omit<ScheduledClass, 'id' | 'createdAt' | 'updatedAt' | 'googleCalendarEventId'>, addToCalendar: boolean): Promise<void>
@@ -80,6 +88,10 @@ interface AppState {
 }
 
 // Derived helpers (pure, no store)
+export function getUniqueTeachers(packages: Package[]): string[] {
+  return [...new Set(packages.map(p => p.instructorName).filter(Boolean))].sort()
+}
+
 export function getAttendanceForPackage(attendance: AttendanceRecord[], packageId: string) {
   return attendance.filter(a => a.packageId === packageId).sort((a, b) => b.attendedAt - a.attendedAt)
 }
@@ -150,6 +162,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   isVideoUploading: false,
   videoUploadProgress: 0,
   videoUploadStatus: '',
+  filterTeacher: null,
+  filterStyle: null,
+  prefilledInstructor: null,
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -304,11 +319,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   openForm(pkg) {
-    set({ isFormOpen: true, editingPackage: pkg ?? null })
+    set({ isFormOpen: true, editingPackage: pkg ?? null, prefilledInstructor: null })
+  },
+
+  openFormForTeacher(name) {
+    set({ isFormOpen: true, editingPackage: null, prefilledInstructor: name })
   },
 
   closeForm() {
-    set({ isFormOpen: false, editingPackage: null })
+    set({ isFormOpen: false, editingPackage: null, prefilledInstructor: null })
+  },
+
+  setFilterTeacher(name) {
+    set({ filterTeacher: name })
+  },
+
+  setFilterStyle(style) {
+    set({ filterStyle: style })
   },
 
   setActivePackage(id) {

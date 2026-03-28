@@ -52,7 +52,7 @@ export const CARD_COLORS = [
 ] as const
 
 export const DANCE_STYLES = [
-  'Zouk', 'Salsa', 'Forró', 'Bachata', 'Samba', 'Tango',
+  'Zouk', 'Salsa', 'Forró', 'Bachata', 'Lambada', 'Samba', 'Tango',
   'Ballroom', 'Contemporary', 'Ballet', 'Jazz', 'Hip-Hop', 'Other',
 ] as const
 

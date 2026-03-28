@@ -1,6 +1,7 @@
 import { format, isToday, isTomorrow, startOfDay } from 'date-fns'
-import { useAppStore } from '../store/appStore'
+import { useAppStore, getUniqueTeachers } from '../store/appStore'
 import { ClassEventCard } from './ClassEventCard'
+import { FilterChips } from './FilterChips'
 import type { ScheduledClass } from '../types'
 
 function dateGroupLabel(epochMs: number): string {
@@ -25,37 +26,82 @@ export function ScheduleTab() {
   const packages = useAppStore(s => s.packages)
   const openClassForm = useAppStore(s => s.openClassForm)
   const isLoading = useAppStore(s => s.isLoading)
+  const filterTeacher = useAppStore(s => s.filterTeacher)
+  const filterStyle = useAppStore(s => s.filterStyle)
+  const setFilterTeacher = useAppStore(s => s.setFilterTeacher)
+  const setFilterStyle = useAppStore(s => s.setFilterStyle)
 
   const now = Date.now()
-  const upcoming = scheduledClasses.filter(c => c.endTime >= now)
-  const past = scheduledClasses.filter(c => c.endTime < now).slice(0, 10) // last 10
-
-  const upcomingGroups = groupByDay(upcoming)
-  const pastGroups = groupByDay(past.slice().reverse()).reverse() // oldest first visually
 
   const pkgMap = Object.fromEntries(packages.map(p => [p.id, p]))
+
+  const teachers = getUniqueTeachers(packages)
+  const uniqueStyles = [...new Set(packages.map(p => p.label.trim()).filter(Boolean))].sort()
+  const showFilters = scheduledClasses.length > 0 && (teachers.length >= 2 || uniqueStyles.length >= 2)
+
+  // Apply filters: a class passes if it has no package (standalone, shown always)
+  // or its linked package matches both active filters
+  function classMatchesFilters(cls: ScheduledClass): boolean {
+    if (!cls.packageId) return true
+    const pkg = pkgMap[cls.packageId]
+    if (!pkg) return true
+    if (filterTeacher && pkg.instructorName !== filterTeacher) return false
+    if (filterStyle && pkg.label.trim() !== filterStyle) return false
+    return true
+  }
+
+  const upcoming = scheduledClasses.filter(c => c.endTime >= now && classMatchesFilters(c))
+  const past = scheduledClasses.filter(c => c.endTime < now && classMatchesFilters(c)).slice(0, 10)
+
+  const upcomingGroups = groupByDay(upcoming)
+  const pastGroups = groupByDay(past.slice().reverse()).reverse()
 
   return (
     <div style={{
       flex: 1,
       overflowY: 'auto',
-      paddingBottom: 80, // bottom nav clearance
+      paddingBottom: 80,
     }}>
       {/* Header */}
       <div style={{
-        padding: '20px 20px 12px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
         background: 'var(--bg-base)',
         zIndex: 10,
-        borderBottom: upcoming.length > 0 || past.length > 0 ? '1px solid var(--border)' : 'none',
+        borderBottom: scheduledClasses.length > 0 ? '1px solid var(--border)' : 'none',
       }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
-          Schedule
-        </h1>
+        <div style={{
+          padding: '20px 20px 12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
+            Schedule
+          </h1>
+        </div>
+
+        {/* Filter chips */}
+        {showFilters && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingBottom: 12 }}>
+            {teachers.length >= 2 && (
+              <FilterChips
+                items={teachers}
+                active={filterTeacher}
+                onSelect={setFilterTeacher}
+                label="Teacher"
+              />
+            )}
+            {uniqueStyles.length >= 2 && (
+              <FilterChips
+                items={uniqueStyles}
+                active={filterStyle}
+                onSelect={setFilterStyle}
+                label="Style"
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -146,8 +192,15 @@ export function ScheduleTab() {
             </>
           )}
 
+          {/* No results after filter */}
+          {upcomingGroups.length === 0 && pastGroups.length === 0 && (filterTeacher || filterStyle) && (
+            <div style={{ padding: '32px 4px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+              No classes match the current filter
+            </div>
+          )}
+
           {/* No upcoming but has history */}
-          {upcomingGroups.length === 0 && past.length > 0 && (
+          {upcomingGroups.length === 0 && pastGroups.length > 0 && !(filterTeacher || filterStyle) && (
             <div style={{ padding: '8px 4px 16px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
               No upcoming classes — tap + to plan one
             </div>
