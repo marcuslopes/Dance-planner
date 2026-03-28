@@ -43,6 +43,7 @@ interface AppState {
 
   // Actions
   signIn(token: string): Promise<void>
+  setSignInError(msg: string | null): void
   init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
@@ -106,8 +107,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeTab: 'packages',
   autoCompleteClasses: false,
 
+  setSignInError(msg) {
+    set({ signInError: msg })
+  },
+
   async signIn(token) {
-    set({ isLoading: true })
+    set({ isLoading: true, signInError: null })
     try {
       const spreadsheetId = await initSpreadsheet(token)
       const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId } = await getSheetIds(token, spreadsheetId)
@@ -117,7 +122,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
-      set({ isLoading: false, signInError: err instanceof Error ? err.message : String(err) })
+      const msg = err instanceof Error ? err.message : String(err)
+      const isAuthError = msg.includes('401') || msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('unauthenticated')
+      if (isAuthError) {
+        localStorage.removeItem('gsession')
+        set({ isLoading: false, signInError: 'Session expired. Please sign in again.' })
+      } else {
+        set({ isLoading: false, signInError: msg })
+      }
     }
   },
 
