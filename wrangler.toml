@@ -1,5 +1,6 @@
 name = "dance-planner"
 compatibility_date = "2024-01-01"
+main = "workers/notion-proxy.ts"
 
 [assets]
 directory = "./dist"

@@ -4,6 +4,17 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  server: {
+    headers: {
+      // Required for SharedArrayBuffer (FFmpeg.wasm multi-threaded mode)
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
+  optimizeDeps: {
+    // FFmpeg ships native ESM — exclude from Vite's CommonJS pre-bundling
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   plugins: [
     react(),
     tailwindcss(),
