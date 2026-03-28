@@ -95,6 +95,29 @@ export function progressPercent(attendance: AttendanceRecord[], pkg: Package): n
   return Math.min((used / pkg.totalClasses) * 100, 100)
 }
 
+// ── Drive folder helpers ──────────────────────────────────────────────────────
+
+async function getOrCreateFolder(token: string, name: string, parentId?: string): Promise<string> {
+  const parentClause = parentId ? ` and '${parentId}' in parents` : " and 'root' in parents"
+  const q = encodeURIComponent(
+    `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentClause}`
+  )
+  const list = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  ).then(r => r.json()) as { files?: { id: string }[] }
+  if (list.files?.length) return list.files[0].id
+
+  const body: Record<string, unknown> = { name, mimeType: 'application/vnd.google-apps.folder' }
+  if (parentId) body.parents = [parentId]
+  const created = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).then(r => r.json()) as { id: string }
+  return created.id
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   packages: [],
   attendance: [],
@@ -442,13 +465,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set({ videoUploadProgress: 75, videoUploadStatus: 'Uploading to Drive…' })
 
-      // 2. Build multipart/related body for Drive upload
+      // 2. Ensure folder structure: Passinho → {instructor} – {label}
+      const appFolderId = await getOrCreateFolder(googleToken, 'Passinho')
+      const pkgFolderName = `${pkg.instructorName} – ${pkg.label}`
+      const pkgFolderId = await getOrCreateFolder(googleToken, pkgFolderName, appFolderId)
+
+      // 3. Build multipart/related body for Drive upload
       const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
-      const metadata = JSON.stringify({ name: filename, mimeType: 'video/mp4' })
+      const metadata = JSON.stringify({ name: filename, mimeType: 'video/mp4', parents: [pkgFolderId] })
       const boundary = 'dance_planner_boundary'
       const enc = new TextEncoder()
       const metaBytes = enc.encode(
-        `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}`
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}`
       )
       const mediaHeaderBytes = enc.encode(`\r\n--${boundary}\r\nContent-Type: video/mp4\r\n\r\n`)
       const closeBytes = enc.encode(`\r\n--${boundary}--`)
