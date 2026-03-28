@@ -11,6 +11,10 @@ export default defineConfig({
       'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
+  optimizeDeps: {
+    // FFmpeg ships native ESM — exclude from Vite's CommonJS pre-bundling
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
   plugins: [
     react(),
     tailwindcss(),

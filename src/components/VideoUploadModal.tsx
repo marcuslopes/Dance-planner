@@ -37,6 +37,9 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
       toast.error('Please select a video file')
       return
     }
+    if (f.size > 200 * 1024 * 1024) {
+      toast.error('Video is very large (>200 MB). Consider trimming it first for faster compression.', { duration: 6000 })
+    }
     setFile(f)
   }
 
