@@ -237,7 +237,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         googleCalendarEventId = await gcCreateEvent(token, data)
       } catch (err) {
         console.warn('Google Calendar sync failed:', err)
-        toast.error('Could not add to Google Calendar. Sign out and sign back in to grant calendar access, then try again.', { duration: 6000 })
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
       }
     }
 
@@ -269,7 +269,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       } catch (err) {
         console.warn('Google Calendar sync failed:', err)
-        toast.error('Could not sync with Google Calendar. Sign out and sign back in to grant calendar access, then try again.', { duration: 6000 })
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
       }
     }
 
