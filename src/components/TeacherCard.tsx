@@ -85,9 +85,9 @@ export function TeacherCard({ name, packages, onClick, index = 0 }: TeacherCardP
           borderRadius: 12,
           background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18,
+          fontSize: 14, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em',
         }}>
-          👤
+          {name.slice(0, 2).toUpperCase()}
         </div>
       </div>
     </button>
