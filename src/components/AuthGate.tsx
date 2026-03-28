@@ -15,11 +15,13 @@ function LoginScreen() {
   const isLoading = useAppStore(s => s.isLoading)
   const signInError = useAppStore(s => s.signInError)
 
+  const setSignInError = useAppStore(s => s.setSignInError)
+
   const login = useGoogleLogin({
     scope: SCOPES,
     prompt: 'consent',
     onSuccess: response => signIn(response.access_token),
-    onError: () => console.error('Google sign-in failed'),
+    onError: () => setSignInError('Google sign-in was cancelled or failed. Please try again.'),
   })
 
   if (isLoading) {
@@ -45,7 +47,7 @@ function LoginScreen() {
       </p>
 
       <button
-        onClick={() => login()}
+        onClick={() => { setSignInError(null); login() }}
         style={{
           display: 'flex', alignItems: 'center', gap: 12,
           padding: '12px 24px', borderRadius: 24, border: 'none',
