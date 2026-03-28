@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ProgressRing } from './ProgressRing'
 import { useAppStore, classesUsed, progressPercent, pricePerClass, getAttendanceForPackage } from '../store/appStore'
 import { convert, formatCurrency, getRateAge } from '../lib/currency'
 import { format } from 'date-fns'
-import { Trash2, Pencil, X, Undo2 } from 'lucide-react'
+import { Trash2, Pencil, X, Undo2, Video, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
 import type { Package } from '../types'
+import { VideoUploadModal } from './VideoUploadModal'
 
 // Guard wrapper — renders nothing when no package is active
 export function PackageDetail() {
@@ -21,8 +22,13 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
     attendance, displayCurrency, rates,
     setActivePackage, openForm, archivePackage, deletePackage,
     markAttended, undoLastAttendance, deleteAttendance,
+    videos, notionToken, deleteVideo,
   } = useAppStore()
   const prevUsed = useRef<number | null>(null)
+  const [showVideoUpload, setShowVideoUpload] = useState(false)
+
+  const pkgVideos = videos.filter(v => v.packageId === pkg.id)
+    .sort((a, b) => b.attendedAt - a.attendedAt)
 
   const used = classesUsed(attendance, pkg.id)
   const remaining = pkg.totalClasses - used
@@ -222,6 +228,73 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
               </div>
             )}
           </div>
+
+          {/* Class Videos section — only shown when Notion is connected */}
+          {notionToken && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Class Videos
+                </h3>
+                <button
+                  onClick={() => setShowVideoUpload(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)',
+                    borderRadius: 8, padding: '5px 12px',
+                    color: '#a78bfa', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  <Video size={13} />
+                  Upload
+                </button>
+              </div>
+
+              {pkgVideos.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', padding: '12px 0' }}>
+                  No videos yet
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {pkgVideos.map((vid, i) => (
+                    <div key={vid.id} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '9px 0',
+                      borderBottom: i < pkgVideos.length - 1 ? '1px solid var(--border)' : 'none',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                        <Video size={16} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                            {format(vid.attendedAt, 'MMM d, yyyy')}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            {(vid.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <a
+                          href={vid.notionPageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ ...iconBtn, textDecoration: 'none' }}
+                        >
+                          <ExternalLink size={14} />
+                        </a>
+                        <button
+                          onClick={() => deleteVideo(vid.id)}
+                          style={{ ...iconBtn, color: 'var(--danger)' }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Mark attended CTA */}
@@ -248,6 +321,15 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
         )}
       </div>
       </div>
+
+      {/* Video upload modal */}
+      {showVideoUpload && (
+        <VideoUploadModal
+          packageId={pkg.id}
+          defaultAttendedAt={pkgAttendance[0]?.attendedAt ?? Date.now()}
+          onClose={() => setShowVideoUpload(false)}
+        />
+      )}
     </>
   )
 }

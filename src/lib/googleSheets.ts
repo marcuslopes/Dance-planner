@@ -1,4 +1,4 @@
-import type { Package, AttendanceRecord, ScheduledClass } from '../types'
+import type { Package, AttendanceRecord, ScheduledClass, VideoRecord } from '../types'
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files'
@@ -39,7 +39,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
     return list.files[0].id as string
   }
 
-  // Create new spreadsheet with all four sheets
+  // Create new spreadsheet with all five sheets
   const body = {
     properties: { title: SPREADSHEET_NAME },
     sheets: [
@@ -47,6 +47,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
       { properties: { title: 'attendance', index: 1 } },
       { properties: { title: 'schedule', index: 2 } },
       { properties: { title: 'settings', index: 3 } },
+      { properties: { title: 'videos', index: 4 } },
     ],
   }
   const created = await gFetch(SHEETS_BASE, token, { method: 'POST', body: JSON.stringify(body) })
@@ -73,6 +74,10 @@ export async function initSpreadsheet(token: string): Promise<string> {
         {
           range: 'settings!A1:B1',
           values: [['key', 'value']],
+        },
+        {
+          range: 'videos!A1:H1',
+          values: [['id', 'package_id', 'notion_block_id', 'notion_page_url', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']],
         },
       ],
     }),
@@ -187,14 +192,16 @@ async function deleteRow(token: string, spreadsheetId: string, sheetId: number, 
 
 // ── Sheet IDs (needed for row deletion) ──────────────────────────────────────
 
-export async function getSheetIds(token: string, spreadsheetId: string): Promise<{ packages: number; attendance: number; schedule: number }> {
+export async function getSheetIds(
+  token: string,
+  spreadsheetId: string,
+): Promise<{ packages: number; attendance: number; schedule: number; videos: number }> {
   const data = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
   let sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
 
-  // Provision missing sheets (schedule and settings) for existing spreadsheets
-  const missing: string[] = []
-  if (!sheets.find(s => s.properties.title === 'schedule')) missing.push('schedule')
-  if (!sheets.find(s => s.properties.title === 'settings')) missing.push('settings')
+  // Provision missing sheets for existing spreadsheets
+  const REQUIRED = ['schedule', 'settings', 'videos'] as const
+  const missing = REQUIRED.filter(name => !sheets.find(s => s.properties.title === name))
 
   if (missing.length > 0) {
     await gFetch(`${SHEETS_BASE}/${spreadsheetId}:batchUpdate`, token, {
@@ -213,6 +220,9 @@ export async function getSheetIds(token: string, spreadsheetId: string): Promise
     if (missing.includes('settings')) {
       headerData.push({ range: 'settings!A1:B1', values: [['key', 'value']] })
     }
+    if (missing.includes('videos')) {
+      headerData.push({ range: 'videos!A1:H1', values: [['id', 'package_id', 'notion_block_id', 'notion_page_url', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']] })
+    }
     if (headerData.length > 0) {
       await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
         method: 'POST',
@@ -228,6 +238,7 @@ export async function getSheetIds(token: string, spreadsheetId: string): Promise
     packages: sheets.find(s => s.properties.title === 'packages')?.properties.sheetId ?? 0,
     attendance: sheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
     schedule: sheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
+    videos: sheets.find(s => s.properties.title === 'videos')?.properties.sheetId ?? 4,
   }
 }
 
@@ -328,4 +339,50 @@ export async function gsGetSettings(token: string, spreadsheetId: string): Promi
 /** Upserts a single setting by key. Value is JSON-serialised. */
 export async function gsPutSetting(token: string, spreadsheetId: string, key: string, value: unknown): Promise<void> {
   await upsertRow(token, spreadsheetId, 'settings', 'B', [key, JSON.stringify(value)], key)
+}
+
+// ── Videos ────────────────────────────────────────────────────────────────────
+
+function rowToVideo(row: string[]): VideoRecord {
+  return {
+    id: row[0],
+    packageId: row[1],
+    notionBlockId: row[2],
+    notionPageUrl: row[3],
+    attendedAt: Number(row[4]),
+    uploadedAt: Number(row[5]),
+    filename: row[6],
+    sizeBytes: Number(row[7]),
+  }
+}
+
+function videoToRow(v: VideoRecord): string[] {
+  return [
+    v.id,
+    v.packageId,
+    v.notionBlockId,
+    v.notionPageUrl,
+    String(v.attendedAt),
+    String(v.uploadedAt),
+    v.filename,
+    String(v.sizeBytes),
+  ]
+}
+
+export async function gsGetVideos(token: string, spreadsheetId: string): Promise<VideoRecord[]> {
+  const rows = await getRows(token, spreadsheetId, 'videos')
+  return rows.filter(r => r[0]).map(rowToVideo).sort((a, b) => b.uploadedAt - a.uploadedAt)
+}
+
+export async function gsPutVideo(token: string, spreadsheetId: string, video: VideoRecord): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'videos', 'H', videoToRow(video), video.id)
+}
+
+export async function gsDeleteVideo(
+  token: string,
+  spreadsheetId: string,
+  videoSheetId: number,
+  id: string,
+): Promise<void> {
+  await deleteRow(token, spreadsheetId, videoSheetId, 'videos', id)
 }

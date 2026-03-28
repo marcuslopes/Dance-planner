@@ -1,29 +1,37 @@
 import { create } from 'zustand'
 import toast from 'react-hot-toast'
-import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass } from '../types'
+import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord } from '../types'
 import {
   initSpreadsheet, getSheetIds,
   gsGetPackages, gsPutPackage, gsDeletePackage,
   gsGetAttendance, gsPutAttendance, gsDeleteAttendance,
   gsGetSchedule, gsPutSchedule, gsDeleteSchedule,
   gsGetSettings, gsPutSetting,
+  gsGetVideos, gsPutVideo, gsDeleteVideo,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
+import {
+  styleFromLabel, ensureStylePage, ensurePackagePage,
+  uploadVideoToPage, clearNotionCache,
+} from '../lib/notion'
+import { compressVideo, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
 
 interface AppState {
   // Data
   packages: Package[]
   attendance: AttendanceRecord[]
   scheduledClasses: ScheduledClass[]
+  videos: VideoRecord[]
   // Auth / Google
   googleToken: string | null
   spreadsheetId: string | null
   pkgSheetId: number
   attSheetId: number
   schedSheetId: number
+  videoSheetId: number
   // UI
   displayCurrency: Currency
   rates: ExchangeRateCache
@@ -40,11 +48,16 @@ interface AppState {
   activeTab: 'packages' | 'schedule' | 'settings'
   // Settings
   autoCompleteClasses: boolean
+  // Notion
+  notionToken: string | null
+  notionRootPageId: string | null
+  isVideoUploading: boolean
+  videoUploadProgress: number  // 0–100
 
   // Actions
   signIn(token: string): Promise<void>
   setSignInError(msg: string | null): void
-  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number): Promise<void>
+  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
   archivePackage(id: string): Promise<void>
@@ -66,6 +79,11 @@ interface AppState {
   setActiveTab(tab: 'packages' | 'schedule' | 'settings'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
   _runAutoComplete(): Promise<void>
+  // Notion actions
+  setNotionConfig(token: string, rootPageId: string): Promise<void>
+  disconnectNotion(): Promise<void>
+  uploadClassVideo(packageId: string, file: File, attendedAt: number): Promise<void>
+  deleteVideo(id: string): Promise<void>
 }
 
 // Derived helpers (pure, no store)
@@ -90,11 +108,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   packages: [],
   attendance: [],
   scheduledClasses: [],
+  videos: [],
   googleToken: null,
   spreadsheetId: null,
   pkgSheetId: 0,
   attSheetId: 1,
   schedSheetId: 2,
+  videoSheetId: 4,
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
@@ -106,6 +126,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   editingClass: null,
   activeTab: 'packages',
   autoCompleteClasses: false,
+  notionToken: null,
+  notionRootPageId: null,
+  isVideoUploading: false,
+  videoUploadProgress: 0,
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -115,11 +139,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true, signInError: null })
     try {
       const spreadsheetId = await initSpreadsheet(token)
-      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId } = await getSheetIds(token, spreadsheetId)
+      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId } = await getSheetIds(token, spreadsheetId)
       // Persist session — Google access tokens last ~1 hour
-      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
-      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId })
-      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId)
+      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -133,12 +157,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId) {
+  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, cloudSettings, localCurrency, localAutoComplete, rates] = await Promise.all([
+    const [pkgs, att, schedule, videos, cloudSettings, localCurrency, localAutoComplete, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
+      gsGetVideos(token, spreadsheetId),
       gsGetSettings(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       dbGetSetting<boolean>('autoCompleteClasses'),
@@ -150,6 +175,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       ?? localCurrency ?? 'CAD'
     const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
       ?? localAutoComplete ?? false
+    const notionToken = (cloudSettings['notionToken'] as string | undefined) ?? null
+    const notionRootPageId = (cloudSettings['notionRootPageId'] as string | undefined) ?? null
 
     // Sync cloud values back into IDB so next cold-start is up-to-date
     await Promise.all([
@@ -161,12 +188,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       packages: pkgs,
       attendance: att,
       scheduledClasses: schedule,
+      videos,
       pkgSheetId,
       attSheetId,
       schedSheetId,
+      videoSheetId,
       displayCurrency: currency,
       rates,
       autoCompleteClasses: autoComplete,
+      notionToken,
+      notionRootPageId,
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
@@ -405,5 +436,100 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (newRecords.length > 0) {
       set(s => ({ attendance: [...newRecords, ...s.attendance].sort((a, b) => b.attendedAt - a.attendedAt) }))
     }
+  },
+
+  // ── Notion actions ────────────────────────────────────────────────────────────
+
+  async setNotionConfig(token, rootPageId) {
+    const { googleToken, spreadsheetId } = get()
+    set({ notionToken: token, notionRootPageId: rootPageId })
+    if (googleToken && spreadsheetId) {
+      await Promise.all([
+        gsPutSetting(googleToken, spreadsheetId, 'notionToken', token),
+        gsPutSetting(googleToken, spreadsheetId, 'notionRootPageId', rootPageId),
+      ])
+    }
+    toast.success('Notion connected!')
+  },
+
+  async disconnectNotion() {
+    const { googleToken, spreadsheetId } = get()
+    clearNotionCache()
+    set({ notionToken: null, notionRootPageId: null })
+    if (googleToken && spreadsheetId) {
+      await Promise.all([
+        gsPutSetting(googleToken, spreadsheetId, 'notionToken', ''),
+        gsPutSetting(googleToken, spreadsheetId, 'notionRootPageId', ''),
+      ])
+    }
+    toast('Notion disconnected', { icon: '🔌' })
+  },
+
+  async uploadClassVideo(packageId, file, attendedAt) {
+    const { googleToken, spreadsheetId, notionToken, notionRootPageId, packages } = get()
+    if (!googleToken || !spreadsheetId) throw new Error('Not signed in')
+    if (!notionToken || !notionRootPageId) throw new Error('Notion not connected')
+
+    const pkg = packages.find(p => p.id === packageId)
+    if (!pkg) throw new Error('Package not found')
+
+    set({ isVideoUploading: true, videoUploadProgress: 0 })
+
+    try {
+      // 1. Compress
+      const compressed = await compressVideo(file, VIDEO_SIZE_LIMIT_MB, pct => {
+        set({ videoUploadProgress: Math.round(pct * 0.7) }) // compression = 0–70%
+      })
+
+      set({ videoUploadProgress: 72 })
+
+      // 2. Ensure Notion page hierarchy
+      const style = styleFromLabel(pkg.label)
+      const stylePageId = await ensureStylePage(notionToken, notionRootPageId, style)
+      const packagePageId = await ensurePackagePage(notionToken, stylePageId, pkg)
+
+      set({ videoUploadProgress: 80 })
+
+      // 3. Upload to Notion
+      const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
+      const { blockId, pageUrl } = await uploadVideoToPage(
+        notionToken,
+        packagePageId,
+        compressed,
+        filename,
+        new Date(attendedAt),
+      )
+
+      set({ videoUploadProgress: 95 })
+
+      // 4. Persist VideoRecord to Google Sheets
+      const record: VideoRecord = {
+        id: crypto.randomUUID(),
+        packageId,
+        notionBlockId: blockId,
+        notionPageUrl: pageUrl,
+        attendedAt,
+        uploadedAt: Date.now(),
+        filename,
+        sizeBytes: compressed.size,
+      }
+      await gsPutVideo(googleToken, spreadsheetId, record)
+      set(s => ({ videos: [record, ...s.videos], videoUploadProgress: 100 }))
+
+      toast.success('Video saved to Notion!')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast.error(`Upload failed: ${msg.slice(0, 120)}`, { duration: 8000 })
+      throw err
+    } finally {
+      set({ isVideoUploading: false, videoUploadProgress: 0 })
+    }
+  },
+
+  async deleteVideo(id) {
+    const { googleToken, spreadsheetId, videoSheetId } = get()
+    if (!googleToken || !spreadsheetId) return
+    await gsDeleteVideo(googleToken, spreadsheetId, videoSheetId, id)
+    set(s => ({ videos: s.videos.filter(v => v.id !== id) }))
   },
 }))
