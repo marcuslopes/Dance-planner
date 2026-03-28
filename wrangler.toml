@@ -4,4 +4,5 @@ main = "workers/notion-proxy.ts"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
