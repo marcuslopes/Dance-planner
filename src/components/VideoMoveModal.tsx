@@ -157,8 +157,9 @@ export function VideoMoveModal({ video, onClose }: Props) {
             </div>
             {targetAttendance.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {targetAttendance.map(rec => {
+                {targetAttendance.map((rec, i) => {
                   const isSelected = rec.attendedAt === selectedAttendedAt
+                  const classNum = targetAttendance.length - i
                   return (
                     <button
                       key={rec.id}
@@ -171,7 +172,7 @@ export function VideoMoveModal({ video, onClose }: Props) {
                         fontWeight: isSelected ? 600 : 400,
                       }}
                     >
-                      {format(rec.attendedAt, 'MMM d, yyyy')}
+                      Class #{classNum}
                     </button>
                   )
                 })}
