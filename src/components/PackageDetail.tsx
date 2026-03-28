@@ -31,6 +31,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
 
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
+  const pkgAttendance = getAttendanceForPackage(attendance, pkg.id)
 
   // Assign each video to exactly one attendance record: same calendar day, closest timestamp.
   // This prevents a video from appearing under every class row on the same date.
