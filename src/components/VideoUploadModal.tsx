@@ -83,97 +83,99 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
             </button>
           </div>
 
-          <div className="scroll-area" style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', paddingBottom: 'max(32px, var(--safe-bottom))' }}>
+          {/* Scrollable content */}
+          <div className="scroll-area" style={{ flex: 1, padding: '16px 24px 8px' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Upload class video
+            </h3>
 
-          <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-            Upload class video
-          </h3>
+            {/* Date picker */}
+            <label style={{ display: 'block', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
+                Class date
+              </div>
+              <input
+                type="date"
+                value={toDateValue(attendedAt)}
+                onChange={e => setAttendedAt(fromDateValue(e.target.value))}
+                style={{
+                  width: '100%', padding: '10px 14px', borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-card)',
+                  color: 'var(--text-primary)',
+                  fontSize: 15,
+                  boxSizing: 'border-box',
+                }}
+              />
+            </label>
 
-          {/* Date picker */}
-          <label style={{ display: 'block', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6, fontWeight: 600 }}>
-              Class date
-            </div>
-            <input
-              type="date"
-              value={toDateValue(attendedAt)}
-              onChange={e => setAttendedAt(fromDateValue(e.target.value))}
+            {/* File picker */}
+            <div
+              onClick={() => fileInputRef.current?.click()}
               style={{
-                width: '100%', padding: '10px 14px', borderRadius: 12,
-                border: '1px solid var(--border)',
-                background: 'var(--bg-card)',
-                color: 'var(--text-primary)',
-                fontSize: 15,
-                boxSizing: 'border-box',
+                border: '2px dashed var(--border)',
+                borderRadius: 16, padding: '24px 16px',
+                textAlign: 'center', cursor: 'pointer',
+                background: file ? 'rgba(124,58,237,0.06)' : 'transparent',
+                borderColor: file ? '#7c3aed' : 'var(--border)',
+                transition: 'all 200ms ease',
               }}
-            />
-          </label>
-
-          {/* File picker */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            style={{
-              border: '2px dashed var(--border)',
-              borderRadius: 16, padding: '24px 16px',
-              textAlign: 'center', cursor: 'pointer',
-              marginBottom: 20,
-              background: file ? 'rgba(124,58,237,0.06)' : 'transparent',
-              borderColor: file ? '#7c3aed' : 'var(--border)',
-              transition: 'all 200ms ease',
-            }}
-          >
-            <Film size={32} style={{ color: file ? '#7c3aed' : 'var(--text-muted)', marginBottom: 8 }} />
-            {file ? (
-              <>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  {file.name}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {(file.size / 1024 / 1024).toFixed(1)} MB
-                  {file.size > VIDEO_SIZE_LIMIT_MB * 1024 * 1024
-                    ? ` → will compress to ≤${VIDEO_SIZE_LIMIT_MB} MB`
-                    : ' (no compression needed)'}
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                  Tap to select a video
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Will be compressed to ≤{VIDEO_SIZE_LIMIT_MB} MB
-                </div>
-              </>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleFileChange}
-              style={{ display: 'none' }}
-            />
+            >
+              <Film size={32} style={{ color: file ? '#7c3aed' : 'var(--text-muted)', marginBottom: 8 }} />
+              {file ? (
+                <>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+                    {file.name}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {(file.size / 1024 / 1024).toFixed(1)} MB
+                    {file.size > VIDEO_SIZE_LIMIT_MB * 1024 * 1024
+                      ? ` → will compress to ≤${VIDEO_SIZE_LIMIT_MB} MB`
+                      : ' (no compression needed)'}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                    Tap to select a video
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Will be compressed to ≤{VIDEO_SIZE_LIMIT_MB} MB
+                  </div>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+              />
+            </div>
           </div>
 
-          <button
-            onClick={handleUpload}
-            disabled={!file}
-            style={{
-              width: '100%', padding: '15px',
-              borderRadius: 16, border: 'none',
-              background: file
-                ? 'linear-gradient(135deg, #7c3aed, #7c3aedcc)'
-                : 'rgba(255,255,255,0.06)',
-              color: file ? '#fff' : 'var(--text-muted)',
-              fontSize: 16, fontWeight: 700,
-              cursor: file ? 'pointer' : 'default',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              boxShadow: file ? '0 4px 20px rgba(124,58,237,0.4)' : 'none',
-            }}
-          >
-            <Upload size={18} />
-            Save to Google Drive
-          </button>
-          </div>{/* end scroll-area */}
+          {/* Pinned CTA — always visible */}
+          <div style={{ padding: '12px 24px', paddingBottom: 'max(24px, var(--safe-bottom))', flexShrink: 0 }}>
+            <button
+              onClick={handleUpload}
+              disabled={!file}
+              style={{
+                width: '100%', padding: '15px',
+                borderRadius: 16, border: 'none',
+                background: file
+                  ? 'linear-gradient(135deg, #7c3aed, #7c3aedcc)'
+                  : 'rgba(255,255,255,0.06)',
+                color: file ? '#fff' : 'var(--text-muted)',
+                fontSize: 16, fontWeight: 700,
+                cursor: file ? 'pointer' : 'default',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                boxShadow: file ? '0 4px 20px rgba(124,58,237,0.4)' : 'none',
+              }}
+            >
+              <Upload size={18} />
+              Save to Google Drive
+            </button>
+          </div>
         </div>
       </div>
     </>
