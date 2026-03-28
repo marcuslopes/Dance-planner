@@ -68,13 +68,13 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            padding: '16px 24px',
-            paddingBottom: 'max(32px, var(--safe-bottom))',
+            maxHeight: '92dvh',
+            display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
           }}
         >
           {/* Handle + close */}
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '16px 24px 0', flexShrink: 0 }}>
             <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
               <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--text-muted)' }} />
             </div>
@@ -82,6 +82,8 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
               <X size={20} />
             </button>
           </div>
+
+          <div className="scroll-area" style={{ flex: 1, overflowY: 'auto', padding: '16px 24px', paddingBottom: 'max(32px, var(--safe-bottom))' }}>
 
           <h3 style={{ margin: '0 0 20px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
             Upload class video
@@ -171,6 +173,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
             <Upload size={18} />
             Save to Google Drive
           </button>
+          </div>{/* end scroll-area */}
         </div>
       </div>
     </>
