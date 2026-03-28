@@ -1,17 +1,12 @@
 export type Currency = 'CAD' | 'USD' | 'BRL'
 
-export interface NotionConfig {
-  token: string       // Notion integration token
-  rootPageId: string  // Page ID of user's "Dance Planner Videos" page
-}
-
 export interface VideoRecord {
   id: string
   packageId: string
-  notionBlockId: string   // video block ID in Notion
-  notionPageUrl: string   // deep link to the package page in Notion
-  attendedAt: number      // epoch ms — which class session this belongs to
-  uploadedAt: number      // epoch ms
+  driveFileId: string      // Google Drive file ID
+  driveWebViewLink: string // Google Drive web view URL
+  attendedAt: number       // epoch ms — which class session this belongs to
+  uploadedAt: number       // epoch ms
   filename: string
   sizeBytes: number
 }

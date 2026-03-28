@@ -77,7 +77,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
         },
         {
           range: 'videos!A1:H1',
-          values: [['id', 'package_id', 'notion_block_id', 'notion_page_url', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']],
+          values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']],
         },
       ],
     }),
@@ -221,7 +221,7 @@ export async function getSheetIds(
       headerData.push({ range: 'settings!A1:B1', values: [['key', 'value']] })
     }
     if (missing.includes('videos')) {
-      headerData.push({ range: 'videos!A1:H1', values: [['id', 'package_id', 'notion_block_id', 'notion_page_url', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']] })
+      headerData.push({ range: 'videos!A1:H1', values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes']] })
     }
     if (headerData.length > 0) {
       await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
@@ -347,8 +347,8 @@ function rowToVideo(row: string[]): VideoRecord {
   return {
     id: row[0],
     packageId: row[1],
-    notionBlockId: row[2],
-    notionPageUrl: row[3],
+    driveFileId: row[2],
+    driveWebViewLink: row[3],
     attendedAt: Number(row[4]),
     uploadedAt: Number(row[5]),
     filename: row[6],
@@ -360,8 +360,8 @@ function videoToRow(v: VideoRecord): string[] {
   return [
     v.id,
     v.packageId,
-    v.notionBlockId,
-    v.notionPageUrl,
+    v.driveFileId,
+    v.driveWebViewLink,
     String(v.attendedAt),
     String(v.uploadedAt),
     v.filename,

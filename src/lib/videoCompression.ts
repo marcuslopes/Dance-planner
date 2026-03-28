@@ -1,8 +1,7 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
 
-// Change to 5 when switching to Notion free plan (5 MB limit)
-export const VIDEO_SIZE_LIMIT_MB = 10
+export const VIDEO_SIZE_LIMIT_MB = 5
 
 // Lazy singleton — the WASM core (~30 MB) is downloaded only on first use
 let ffmpegInstance: FFmpeg | null = null

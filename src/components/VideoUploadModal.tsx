@@ -19,7 +19,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
   const [file, setFile] = useState<File | null>(null)
   const [attendedAt, setAttendedAt] = useState<number>(defaultAttendedAt)
   const [step, setStep] = useState<Step>('pick')
-  const [notionUrl, setNotionUrl] = useState<string | null>(null)
+  const [driveLink, setDriveLink] = useState<string | null>(null)
 
   // Format epoch ms to YYYY-MM-DD for <input type="date">
   function toDateValue(ts: number) {
@@ -52,7 +52,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
       // Grab the most recently added video for this package from store
       const { videos } = useAppStore.getState()
       const latest = videos.find(v => v.packageId === packageId)
-      setNotionUrl(latest?.notionPageUrl ?? null)
+      setDriveLink(latest?.driveWebViewLink ?? null)
       setStep('done')
     } catch {
       // error toast handled in store
@@ -63,9 +63,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
   const progressLabel =
     videoUploadProgress < 70
       ? `Compressing… ${videoUploadProgress}%`
-      : videoUploadProgress < 85
-        ? 'Building Notion pages…'
-        : `Uploading to Notion… ${videoUploadProgress}%`
+      : `Uploading to Google Drive… ${videoUploadProgress}%`
 
   return (
     <>
@@ -197,7 +195,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
                 }}
               >
                 <Upload size={18} />
-                Save to Notion
+                Save to Google Drive
               </button>
             </>
           )}
@@ -230,14 +228,14 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
             <div style={{ textAlign: 'center', padding: '16px 0 24px' }}>
               <CheckCircle size={48} style={{ color: '#10b981', marginBottom: 16 }} />
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-                Saved to Notion!
+                Saved to Google Drive!
               </div>
               <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 24 }}>
                 {format(attendedAt, 'MMMM d, yyyy')} class video
               </div>
-              {notionUrl && (
+              {driveLink && (
                 <a
-                  href={notionUrl}
+                  href={driveLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
@@ -248,7 +246,7 @@ export function VideoUploadModal({ packageId, defaultAttendedAt, onClose }: Prop
                     background: 'rgba(124,58,237,0.06)',
                   }}
                 >
-                  Open in Notion ↗
+                  Open in Google Drive ↗
                 </a>
               )}
               <button
