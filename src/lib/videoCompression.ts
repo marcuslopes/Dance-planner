@@ -114,9 +114,7 @@ export async function compressVideo(
   await ffmpeg.deleteFile(inputName)
   await ffmpeg.deleteFile(outputName)
 
-  // FFmpeg may return Uint8Array with SharedArrayBuffer; copy to a regular ArrayBuffer for Blob
-  const bytes = data instanceof Uint8Array
-    ? new Uint8Array(data.buffer instanceof SharedArrayBuffer ? data.buffer.slice(0) : data.buffer)
-    : data
+  // Copy to a plain ArrayBuffer (single-threaded core returns regular ArrayBuffer)
+  const bytes = data instanceof Uint8Array ? new Uint8Array(data.buffer) : data
   return new Blob([bytes as BlobPart], { type: 'video/mp4' })
 }
