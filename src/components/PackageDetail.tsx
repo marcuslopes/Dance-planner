@@ -22,7 +22,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
     attendance, displayCurrency, rates,
     setActivePackage, openForm, archivePackage, deletePackage,
     markAttended, undoLastAttendance, deleteAttendance,
-    videos, notionToken, deleteVideo,
+    videos, deleteVideo,
   } = useAppStore()
   const prevUsed = useRef<number | null>(null)
   const [showVideoUpload, setShowVideoUpload] = useState(false)
@@ -229,9 +229,8 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
             )}
           </div>
 
-          {/* Class Videos section — only shown when Notion is connected */}
-          {notionToken && (
-            <div style={{ marginBottom: 16 }}>
+          {/* Class Videos */}
+          <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                   Class Videos
@@ -275,7 +274,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <a
-                          href={vid.notionPageUrl}
+                          href={vid.driveWebViewLink}
                           target="_blank"
                           rel="noopener noreferrer"
                           style={{ ...iconBtn, textDecoration: 'none' }}
@@ -294,7 +293,6 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                 </div>
               )}
             </div>
-          )}
         </div>
 
         {/* Mark attended CTA */}

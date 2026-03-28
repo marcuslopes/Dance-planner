@@ -13,10 +13,6 @@ import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalend
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
-import {
-  styleFromLabel, ensureStylePage, ensurePackagePage,
-  uploadVideoToPage, clearNotionCache,
-} from '../lib/notion'
 import { compressVideo, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
 
 interface AppState {
@@ -48,9 +44,6 @@ interface AppState {
   activeTab: 'packages' | 'schedule' | 'settings'
   // Settings
   autoCompleteClasses: boolean
-  // Notion
-  notionToken: string | null
-  notionRootPageId: string | null
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
 
@@ -79,9 +72,6 @@ interface AppState {
   setActiveTab(tab: 'packages' | 'schedule' | 'settings'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
   _runAutoComplete(): Promise<void>
-  // Notion actions
-  setNotionConfig(token: string, rootPageId: string): Promise<void>
-  disconnectNotion(): Promise<void>
   uploadClassVideo(packageId: string, file: File, attendedAt: number): Promise<void>
   deleteVideo(id: string): Promise<void>
 }
@@ -126,8 +116,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   editingClass: null,
   activeTab: 'packages',
   autoCompleteClasses: false,
-  notionToken: null,
-  notionRootPageId: null,
   isVideoUploading: false,
   videoUploadProgress: 0,
 
@@ -175,9 +163,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       ?? localCurrency ?? 'CAD'
     const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
       ?? localAutoComplete ?? false
-    const notionToken = (cloudSettings['notionToken'] as string | undefined) ?? null
-    const notionRootPageId = (cloudSettings['notionRootPageId'] as string | undefined) ?? null
-
     // Sync cloud values back into IDB so next cold-start is up-to-date
     await Promise.all([
       dbSetSetting('displayCurrency', currency),
@@ -196,8 +181,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       displayCurrency: currency,
       rates,
       autoCompleteClasses: autoComplete,
-      notionToken,
-      notionRootPageId,
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
@@ -438,37 +421,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // ── Notion actions ────────────────────────────────────────────────────────────
-
-  async setNotionConfig(token, rootPageId) {
-    const { googleToken, spreadsheetId } = get()
-    set({ notionToken: token, notionRootPageId: rootPageId })
-    if (googleToken && spreadsheetId) {
-      await Promise.all([
-        gsPutSetting(googleToken, spreadsheetId, 'notionToken', token),
-        gsPutSetting(googleToken, spreadsheetId, 'notionRootPageId', rootPageId),
-      ])
-    }
-    toast.success('Notion connected!')
-  },
-
-  async disconnectNotion() {
-    const { googleToken, spreadsheetId } = get()
-    clearNotionCache()
-    set({ notionToken: null, notionRootPageId: null })
-    if (googleToken && spreadsheetId) {
-      await Promise.all([
-        gsPutSetting(googleToken, spreadsheetId, 'notionToken', ''),
-        gsPutSetting(googleToken, spreadsheetId, 'notionRootPageId', ''),
-      ])
-    }
-    toast('Notion disconnected', { icon: '🔌' })
-  },
-
   async uploadClassVideo(packageId, file, attendedAt) {
-    const { googleToken, spreadsheetId, notionToken, notionRootPageId, packages } = get()
+    const { googleToken, spreadsheetId, packages } = get()
     if (!googleToken || !spreadsheetId) throw new Error('Not signed in')
-    if (!notionToken || !notionRootPageId) throw new Error('Notion not connected')
 
     const pkg = packages.find(p => p.id === packageId)
     if (!pkg) throw new Error('Package not found')
@@ -476,29 +431,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isVideoUploading: true, videoUploadProgress: 0 })
 
     try {
-      // 1. Compress
+      // 1. Compress to ≤5 MB
       const compressed = await compressVideo(file, VIDEO_SIZE_LIMIT_MB, pct => {
         set({ videoUploadProgress: Math.round(pct * 0.7) }) // compression = 0–70%
       })
 
-      set({ videoUploadProgress: 72 })
+      set({ videoUploadProgress: 75 })
 
-      // 2. Ensure Notion page hierarchy
-      const style = styleFromLabel(pkg.label)
-      const stylePageId = await ensureStylePage(notionToken, notionRootPageId, style)
-      const packagePageId = await ensurePackagePage(notionToken, stylePageId, pkg)
+      // 2. Build multipart/related body for Drive upload
+      const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
+      const metadata = JSON.stringify({ name: filename, mimeType: 'video/mp4' })
+      const boundary = 'dance_planner_boundary'
+      const enc = new TextEncoder()
+      const metaBytes = enc.encode(
+        `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}`
+      )
+      const mediaHeaderBytes = enc.encode(`\r\n--${boundary}\r\nContent-Type: video/mp4\r\n\r\n`)
+      const closeBytes = enc.encode(`\r\n--${boundary}--`)
+      const videoBytes = new Uint8Array(await compressed.arrayBuffer())
+
+      const body = new Uint8Array(
+        metaBytes.byteLength + mediaHeaderBytes.byteLength + videoBytes.byteLength + closeBytes.byteLength
+      )
+      let offset = 0
+      body.set(metaBytes, offset); offset += metaBytes.byteLength
+      body.set(mediaHeaderBytes, offset); offset += mediaHeaderBytes.byteLength
+      body.set(videoBytes, offset); offset += videoBytes.byteLength
+      body.set(closeBytes, offset)
 
       set({ videoUploadProgress: 80 })
 
-      // 3. Upload to Notion
-      const filename = `class-${new Date(attendedAt).toISOString().slice(0, 10)}.mp4`
-      const { blockId, pageUrl } = await uploadVideoToPage(
-        notionToken,
-        packagePageId,
-        compressed,
-        filename,
-        new Date(attendedAt),
+      // 3. POST to Google Drive
+      const uploadResp = await fetch(
+        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${googleToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+          },
+          body,
+        }
       )
+      if (!uploadResp.ok) {
+        const text = await uploadResp.text()
+        throw new Error(`Drive upload failed ${uploadResp.status}: ${text}`)
+      }
+      const { id: driveFileId, webViewLink: driveWebViewLink } =
+        await uploadResp.json() as { id: string; webViewLink: string }
 
       set({ videoUploadProgress: 95 })
 
@@ -506,8 +486,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const record: VideoRecord = {
         id: crypto.randomUUID(),
         packageId,
-        notionBlockId: blockId,
-        notionPageUrl: pageUrl,
+        driveFileId,
+        driveWebViewLink,
         attendedAt,
         uploadedAt: Date.now(),
         filename,
@@ -516,7 +496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await gsPutVideo(googleToken, spreadsheetId, record)
       set(s => ({ videos: [record, ...s.videos], videoUploadProgress: 100 }))
 
-      toast.success('Video saved to Notion!')
+      toast.success('Video saved to Google Drive!')
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       toast.error(`Upload failed: ${msg.slice(0, 120)}`, { duration: 8000 })
@@ -527,8 +507,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async deleteVideo(id) {
-    const { googleToken, spreadsheetId, videoSheetId } = get()
+    const { googleToken, spreadsheetId, videoSheetId, videos } = get()
     if (!googleToken || !spreadsheetId) return
+
+    const video = videos.find(v => v.id === id)
+    if (video?.driveFileId) {
+      try {
+        const resp = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${video.driveFileId}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${googleToken}` } }
+        )
+        if (!resp.ok && resp.status !== 404) {
+          console.warn(`Drive delete returned ${resp.status}`)
+        }
+      } catch (err) {
+        console.warn('Drive file delete failed:', err)
+      }
+    }
+
     await gsDeleteVideo(googleToken, spreadsheetId, videoSheetId, id)
     set(s => ({ videos: s.videos.filter(v => v.id !== id) }))
   },
