@@ -3,12 +3,13 @@ import { ProgressRing } from './ProgressRing'
 import { useAppStore, classesUsed, progressPercent, pricePerClass, getAttendanceForPackage } from '../store/appStore'
 import { convert, formatCurrency, getRateAge } from '../lib/currency'
 import { format, isSameDay } from 'date-fns'
-import { Trash2, Pencil, X, Undo2, Video, ExternalLink } from 'lucide-react'
+import { Trash2, Pencil, X, Undo2, Video, ExternalLink, ArrowRightLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
 import type { Package, VideoRecord } from '../types'
 import { VideoUploadModal } from './VideoUploadModal'
 import { VideoEditModal } from './VideoEditModal'
+import { VideoMoveModal } from './VideoMoveModal'
 
 // Guard wrapper — renders nothing when no package is active
 export function PackageDetail() {
@@ -28,6 +29,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
   const prevUsed = useRef<number | null>(null)
   const [uploadingForDate, setUploadingForDate] = useState<number | null>(null)
   const [editingVideo, setEditingVideo] = useState<VideoRecord | null>(null)
+  const [movingVideo, setMovingVideo] = useState<VideoRecord | null>(null)
 
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
@@ -294,6 +296,9 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                             <button onClick={() => setEditingVideo(vid)} style={iconBtn}>
                               <Pencil size={13} />
                             </button>
+                            <button onClick={() => setMovingVideo(vid)} style={moveBtn} title="Move to another class">
+                              <ArrowRightLeft size={13} />
+                            </button>
                             <button onClick={() => deleteVideo(vid.id)} style={{ ...iconBtn, color: 'var(--danger)' }}>
                               <X size={13} />
                             </button>
@@ -341,6 +346,9 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                         </a>
                         <button onClick={() => setEditingVideo(vid)} style={iconBtn}>
                           <Pencil size={13} />
+                        </button>
+                        <button onClick={() => setMovingVideo(vid)} style={moveBtn} title="Move to another class">
+                          <ArrowRightLeft size={13} />
                         </button>
                         <button onClick={() => deleteVideo(vid.id)} style={{ ...iconBtn, color: 'var(--danger)' }}>
                           <X size={13} />
@@ -396,6 +404,14 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
           onClose={() => setEditingVideo(null)}
         />
       )}
+
+      {/* Video move modal */}
+      {movingVideo && (
+        <VideoMoveModal
+          video={movingVideo}
+          onClose={() => setMovingVideo(null)}
+        />
+      )}
     </>
   )
 }
@@ -423,4 +439,10 @@ const uploadBtn: React.CSSProperties = {
   background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.25)',
   borderRadius: 8, padding: '5px 8px', cursor: 'pointer',
   color: '#a78bfa', display: 'flex', alignItems: 'center', justifyContent: 'center',
+}
+
+const moveBtn: React.CSSProperties = {
+  background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.25)',
+  borderRadius: 8, padding: '5px 8px', cursor: 'pointer',
+  color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center',
 }

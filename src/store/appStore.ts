@@ -76,6 +76,7 @@ interface AppState {
   uploadClassVideo(packageId: string, file: File, attendedAt: number, title?: string, notes?: string): Promise<void>
   updateVideo(id: string, patch: { title?: string; notes?: string }): Promise<void>
   deleteVideo(id: string): Promise<void>
+  moveVideo(id: string, newPackageId: string, newAttendedAt: number): Promise<void>
 }
 
 // Derived helpers (pure, no store)
@@ -594,5 +595,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     await gsDeleteVideo(googleToken, spreadsheetId, videoSheetId, id)
     set(s => ({ videos: s.videos.filter(v => v.id !== id) }))
+  },
+
+  async moveVideo(id, newPackageId, newAttendedAt) {
+    const { googleToken, spreadsheetId, videos } = get()
+    if (!googleToken || !spreadsheetId) return
+    const video = videos.find(v => v.id === id)
+    if (!video) return
+    const updated: VideoRecord = { ...video, packageId: newPackageId, attendedAt: newAttendedAt }
+    await gsPutVideo(googleToken, spreadsheetId, updated)
+    set(s => ({ videos: s.videos.map(v => v.id === id ? updated : v) }))
+    toast.success('Video moved!')
   },
 }))
