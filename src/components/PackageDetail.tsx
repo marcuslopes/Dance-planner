@@ -3,7 +3,7 @@ import { ProgressRing } from './ProgressRing'
 import { useAppStore, classesUsed, progressPercent, pricePerClass, getAttendanceForPackage } from '../store/appStore'
 import { convert, formatCurrency, getRateAge } from '../lib/currency'
 import { format, isSameDay } from 'date-fns'
-import { Trash2, Pencil, X, Undo2, Video, ExternalLink, ArrowRightLeft } from 'lucide-react'
+import { Trash2, Pencil, X, Undo2, Video, ExternalLink, ArrowRightLeft, BookOpen } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
 import type { AttendanceRecord, Package, VideoRecord } from '../types'
@@ -251,6 +251,13 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button
+                            onClick={() => setJournalRecord(rec)}
+                            style={{ background: 'none', border: 'none', color: rec.rating ? pkg.color : 'var(--text-muted)', cursor: 'pointer', padding: 4 }}
+                            title="Class journal"
+                          >
+                            <BookOpen size={13} />
+                          </button>
                           {!isArchived && (
                             <button
                               onClick={() => setUploadingForDate(rec.attendedAt)}
@@ -268,6 +275,29 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                           </button>
                         </div>
                       </div>
+
+                      {/* Journal notes */}
+                      {(rec.rating || rec.learnedNote || rec.practiceNote) && (
+                        <div style={{ padding: '4px 0 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {rec.rating && (
+                            <div style={{ display: 'flex', gap: 2 }}>
+                              {[1,2,3,4,5].map(s => (
+                                <span key={s} style={{ fontSize: 12, color: s <= rec.rating! ? pkg.color : 'var(--border)' }}>★</span>
+                              ))}
+                            </div>
+                          )}
+                          {rec.learnedNote && (
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Learned: </span>{rec.learnedNote}
+                            </div>
+                          )}
+                          {rec.practiceNote && (
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-muted)' }}>Practice: </span>{rec.practiceNote}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Video sub-rows */}
                       {rowVideos.map((vid, vi) => (
