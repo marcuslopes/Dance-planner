@@ -56,7 +56,7 @@ export function EventCard({ event, onClick }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', marginBottom: event.location || event.cost != null || event.styles.length > 0 ? 6 : 0 }}>
           {formatDateRange(event.startDate, event.endDate)}
           {event.googleCalendarEventId && (
-            <CalendarCheck size={13} style={{ color: '#7c3aed', flexShrink: 0 }} title="Synced to Google Calendar" />
+            <CalendarCheck size={13} style={{ color: '#7c3aed', flexShrink: 0 }} />
           )}
         </div>
 
