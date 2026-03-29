@@ -1,4 +1,4 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react'
+import { Component, type ReactNode, type ErrorInfo, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { PackageList } from './components/PackageList'
 import { PackageDetail } from './components/PackageDetail'
@@ -10,6 +10,8 @@ import { ClassForm } from './components/ClassForm'
 import { BottomNav } from './components/BottomNav'
 import { AuthGate } from './components/AuthGate'
 import { UploadProgressBar } from './components/UploadProgressBar'
+import { SearchOverlay } from './components/SearchOverlay'
+import { EventForm } from './components/EventForm'
 import { useAppStore } from './store/appStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -34,6 +36,19 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
 function AppInner() {
   const activeTab = useAppStore(s => s.activeTab)
+  const setSearchOpen = useAppStore(s => s.setSearchOpen)
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      if (e.key === '/' && !target.matches('input, textarea')) {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [setSearchOpen])
 
   return (
     <>
@@ -44,6 +59,8 @@ function AppInner() {
       <PackageDetail />
       <PackageForm />
       <ClassForm />
+      <EventForm />
+      <SearchOverlay />
       <BottomNav />
       <UploadProgressBar />
       <Toaster

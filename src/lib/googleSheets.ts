@@ -1,4 +1,4 @@
-import type { Package, AttendanceRecord, ScheduledClass, VideoRecord } from '../types'
+import type { Package, AttendanceRecord, ScheduledClass, VideoRecord, DanceEvent, Currency } from '../types'
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files'
@@ -39,7 +39,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
     return list.files[0].id as string
   }
 
-  // Create new spreadsheet with all five sheets
+  // Create new spreadsheet with all six sheets
   const body = {
     properties: { title: SPREADSHEET_NAME },
     sheets: [
@@ -48,6 +48,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
       { properties: { title: 'schedule', index: 2 } },
       { properties: { title: 'settings', index: 3 } },
       { properties: { title: 'videos', index: 4 } },
+      { properties: { title: 'events', index: 5 } },
     ],
   }
   const created = await gFetch(SHEETS_BASE, token, { method: 'POST', body: JSON.stringify(body) })
@@ -64,8 +65,8 @@ export async function initSpreadsheet(token: string): Promise<string> {
           values: [['id', 'instructor_name', 'label', 'total_classes', 'price_amount', 'base_currency', 'color', 'created_at', 'updated_at', 'archived_at']],
         },
         {
-          range: 'attendance!A1:D1',
-          values: [['id', 'package_id', 'attended_at', 'note']],
+          range: 'attendance!A1:G1',
+          values: [['id', 'package_id', 'attended_at', 'note', 'rating', 'learned_note', 'practice_note']],
         },
         {
           range: 'schedule!A1:K1',
@@ -78,6 +79,10 @@ export async function initSpreadsheet(token: string): Promise<string> {
         {
           range: 'videos!A1:J1',
           values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes', 'title', 'notes']],
+        },
+        {
+          range: 'events!A1:K1',
+          values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'created_at', 'updated_at']],
         },
       ],
     }),
@@ -124,11 +129,22 @@ function rowToAtt(row: string[]): AttendanceRecord {
     packageId: row[1],
     attendedAt: Number(row[2]),
     note: row[3] || null,
+    rating: row[4] ? Number(row[4]) : null,
+    learnedNote: row[5] || null,
+    practiceNote: row[6] || null,
   }
 }
 
 function attToRow(att: AttendanceRecord): string[] {
-  return [att.id, att.packageId, String(att.attendedAt), att.note ?? '']
+  return [
+    att.id,
+    att.packageId,
+    String(att.attendedAt),
+    att.note ?? '',
+    att.rating != null ? String(att.rating) : '',
+    att.learnedNote ?? '',
+    att.practiceNote ?? '',
+  ]
 }
 
 // ── Generic sheet helpers ─────────────────────────────────────────────────────
@@ -195,12 +211,12 @@ async function deleteRow(token: string, spreadsheetId: string, sheetId: number, 
 export async function getSheetIds(
   token: string,
   spreadsheetId: string,
-): Promise<{ packages: number; attendance: number; schedule: number; videos: number }> {
+): Promise<{ packages: number; attendance: number; schedule: number; videos: number; events: number }> {
   const data = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
   let sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
 
   // Provision missing sheets for existing spreadsheets
-  const REQUIRED = ['schedule', 'settings', 'videos'] as const
+  const REQUIRED = ['schedule', 'settings', 'videos', 'events'] as const
   const missing = REQUIRED.filter(name => !sheets.find(s => s.properties.title === name))
 
   if (missing.length > 0) {
@@ -223,6 +239,9 @@ export async function getSheetIds(
     if (missing.includes('videos')) {
       headerData.push({ range: 'videos!A1:J1', values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes', 'title', 'notes']] })
     }
+    if (missing.includes('events')) {
+      headerData.push({ range: 'events!A1:K1', values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'created_at', 'updated_at']] })
+    }
     if (headerData.length > 0) {
       await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
         method: 'POST',
@@ -239,6 +258,7 @@ export async function getSheetIds(
     attendance: sheets.find(s => s.properties.title === 'attendance')?.properties.sheetId ?? 1,
     schedule: sheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
     videos: sheets.find(s => s.properties.title === 'videos')?.properties.sheetId ?? 4,
+    events: sheets.find(s => s.properties.title === 'events')?.properties.sheetId ?? 5,
   }
 }
 
@@ -265,7 +285,7 @@ export async function gsGetAttendance(token: string, spreadsheetId: string): Pro
 }
 
 export async function gsPutAttendance(token: string, spreadsheetId: string, att: AttendanceRecord): Promise<void> {
-  await upsertRow(token, spreadsheetId, 'attendance', 'D', attToRow(att), att.id)
+  await upsertRow(token, spreadsheetId, 'attendance', 'G', attToRow(att), att.id)
 }
 
 export async function gsDeleteAttendance(token: string, spreadsheetId: string, attSheetId: number, id: string): Promise<void> {
@@ -389,4 +409,56 @@ export async function gsDeleteVideo(
   id: string,
 ): Promise<void> {
   await deleteRow(token, spreadsheetId, videoSheetId, 'videos', id)
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+function rowToEvent(row: string[]): DanceEvent {
+  return {
+    id: row[0],
+    name: row[1],
+    startDate: Number(row[2]),
+    endDate: row[3] ? Number(row[3]) : null,
+    location: row[4] || null,
+    cost: row[5] ? Number(row[5]) : null,
+    baseCurrency: (row[6] as Currency) || null,
+    styles: row[7] ? JSON.parse(row[7]) : [],
+    notes: row[8] || null,
+    createdAt: Number(row[9]),
+    updatedAt: Number(row[10]),
+  }
+}
+
+function eventToRow(e: DanceEvent): string[] {
+  return [
+    e.id,
+    e.name,
+    String(e.startDate),
+    e.endDate != null ? String(e.endDate) : '',
+    e.location ?? '',
+    e.cost != null ? String(e.cost) : '',
+    e.baseCurrency ?? '',
+    JSON.stringify(e.styles),
+    e.notes ?? '',
+    String(e.createdAt),
+    String(e.updatedAt),
+  ]
+}
+
+export async function gsGetEvents(token: string, spreadsheetId: string): Promise<DanceEvent[]> {
+  const rows = await getRows(token, spreadsheetId, 'events')
+  return rows.filter(r => r[0]).map(rowToEvent).sort((a, b) => b.startDate - a.startDate)
+}
+
+export async function gsPutEvent(token: string, spreadsheetId: string, event: DanceEvent): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'events', 'K', eventToRow(event), event.id)
+}
+
+export async function gsDeleteEvent(
+  token: string,
+  spreadsheetId: string,
+  eventsSheetId: number,
+  id: string,
+): Promise<void> {
+  await deleteRow(token, spreadsheetId, eventsSheetId, 'events', id)
 }

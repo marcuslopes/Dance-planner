@@ -3,6 +3,12 @@ import { useAppStore } from '../store/appStore'
 export function SettingsTab() {
   const autoCompleteClasses = useAppStore(s => s.autoCompleteClasses)
   const setAutoCompleteClasses = useAppStore(s => s.setAutoCompleteClasses)
+  const monthlyBudget = useAppStore(s => s.monthlyBudget)
+  const setMonthlyBudget = useAppStore(s => s.setMonthlyBudget)
+  const displayCurrency = useAppStore(s => s.displayCurrency)
+
+  const currencySymbols: Record<string, string> = { CAD: 'CA$', USD: 'US$', BRL: 'R$' }
+  const currencySymbol = currencySymbols[displayCurrency] ?? displayCurrency
 
   return (
     <div style={{
@@ -66,6 +72,45 @@ export function SettingsTab() {
             transition: 'left 0.2s',
           }} />
         </button>
+      </div>
+
+      {/* Monthly budget */}
+      <div style={{
+        padding: '16px',
+        background: 'var(--bg-elevated)',
+        borderRadius: 14,
+        border: '1px solid var(--border)',
+        marginBottom: 16,
+      }}>
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
+            Monthly dance budget
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            Track spending against a monthly limit.
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 600 }}>
+            {currencySymbol}
+          </span>
+          <input
+            type="number"
+            min={0}
+            value={monthlyBudget ?? ''}
+            onChange={e => {
+              const v = e.target.value
+              setMonthlyBudget(v === '' ? null : Number(v))
+            }}
+            placeholder="No budget set"
+            style={{
+              flex: 1, padding: '8px 12px',
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 10, color: 'var(--text-primary)', fontSize: 14,
+              fontFamily: 'inherit', outline: 'none',
+            }}
+          />
+        </div>
       </div>
     </div>
   )

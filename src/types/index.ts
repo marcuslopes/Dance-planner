@@ -31,6 +31,23 @@ export interface AttendanceRecord {
   packageId: string
   attendedAt: number       // epoch ms
   note: string | null
+  rating: number | null       // 1–5
+  learnedNote: string | null  // what was learned
+  practiceNote: string | null // what to practice
+}
+
+export interface DanceEvent {
+  id: string
+  name: string
+  startDate: number         // epoch ms
+  endDate: number | null    // epoch ms — for multi-day events
+  location: string | null
+  cost: number | null
+  baseCurrency: Currency | null
+  styles: string[]          // subset of DANCE_STYLES
+  notes: string | null
+  createdAt: number
+  updatedAt: number
 }
 
 export interface ExchangeRateCache {

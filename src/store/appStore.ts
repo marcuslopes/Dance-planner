@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import toast from 'react-hot-toast'
-import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord } from '../types'
+import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord, DanceEvent } from '../types'
 import {
   initSpreadsheet, getSheetIds,
   gsGetPackages, gsPutPackage, gsDeletePackage,
@@ -8,6 +8,7 @@ import {
   gsGetSchedule, gsPutSchedule, gsDeleteSchedule,
   gsGetSettings, gsPutSetting,
   gsGetVideos, gsPutVideo, gsDeleteVideo,
+  gsGetEvents, gsPutEvent, gsDeleteEvent,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
@@ -21,6 +22,7 @@ interface AppState {
   attendance: AttendanceRecord[]
   scheduledClasses: ScheduledClass[]
   videos: VideoRecord[]
+  events: DanceEvent[]
   // Auth / Google
   googleToken: string | null
   spreadsheetId: string | null
@@ -28,6 +30,7 @@ interface AppState {
   attSheetId: number
   schedSheetId: number
   videoSheetId: number
+  eventsSheetId: number
   // UI
   displayCurrency: Currency
   rates: ExchangeRateCache
@@ -40,10 +43,14 @@ interface AppState {
   // Schedule modal state
   isClassFormOpen: boolean
   editingClass: ScheduledClass | null
+  // Event modal state
+  isEventFormOpen: boolean
+  editingEvent: DanceEvent | null
   // Tab navigation
   activeTab: 'packages' | 'schedule' | 'settings' | 'analytics'
   // Settings
   autoCompleteClasses: boolean
+  monthlyBudget: number | null
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
   videoUploadStatus: string
@@ -52,11 +59,13 @@ interface AppState {
   filterStyle: string | null
   // Pre-filled instructor for new package form (when opening from TeacherDetail)
   prefilledInstructor: string | null
+  // Search
+  isSearchOpen: boolean
 
   // Actions
   signIn(token: string): Promise<void>
   setSignInError(msg: string | null): void
-  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number): Promise<void>
+  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number, eventsSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
   archivePackage(id: string): Promise<void>
@@ -64,6 +73,7 @@ interface AppState {
   markAttended(packageId: string): Promise<AttendanceRecord>
   undoLastAttendance(packageId: string): Promise<void>
   deleteAttendance(id: string): Promise<void>
+  updateAttendance(id: string, patch: Pick<AttendanceRecord, 'rating' | 'learnedNote' | 'practiceNote'>): Promise<void>
   setDisplayCurrency(c: Currency): Promise<void>
   refreshRates(): Promise<void>
   openForm(pkg?: Package): void
@@ -80,11 +90,20 @@ interface AppState {
   closeClassForm(): void
   setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
+  setMonthlyBudget(v: number | null): Promise<void>
   _runAutoComplete(): Promise<void>
   uploadClassVideo(packageId: string, file: File, attendedAt: number, title?: string, notes?: string): Promise<void>
   updateVideo(id: string, patch: { title?: string; notes?: string }): Promise<void>
   deleteVideo(id: string): Promise<void>
   moveVideo(id: string, newPackageId: string, newAttendedAt: number): Promise<void>
+  // Search
+  setSearchOpen(open: boolean): void
+  // Event actions
+  addEvent(data: Omit<DanceEvent, 'id' | 'createdAt' | 'updatedAt'>): Promise<void>
+  updateEvent(id: string, patch: Partial<DanceEvent>): Promise<void>
+  deleteEvent(id: string): Promise<void>
+  openEventForm(event?: DanceEvent): void
+  closeEventForm(): void
 }
 
 // Derived helpers (pure, no store)
@@ -142,12 +161,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   attendance: [],
   scheduledClasses: [],
   videos: [],
+  events: [],
   googleToken: null,
   spreadsheetId: null,
   pkgSheetId: 0,
   attSheetId: 1,
   schedSheetId: 2,
   videoSheetId: 4,
+  eventsSheetId: 5,
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
@@ -157,14 +178,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   activePackageId: null,
   isClassFormOpen: false,
   editingClass: null,
+  isEventFormOpen: false,
+  editingEvent: null,
   activeTab: 'packages',
   autoCompleteClasses: false,
+  monthlyBudget: null,
   isVideoUploading: false,
   videoUploadProgress: 0,
   videoUploadStatus: '',
   filterTeacher: null,
   filterStyle: null,
   prefilledInstructor: null,
+  isSearchOpen: false,
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -174,11 +199,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true, signInError: null })
     try {
       const spreadsheetId = await initSpreadsheet(token)
-      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId } = await getSheetIds(token, spreadsheetId)
+      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId, events: eventsSheetId } = await getSheetIds(token, spreadsheetId)
       // Persist session — Google access tokens last ~1 hour
-      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
-      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId })
-      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId)
+      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -192,16 +217,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId) {
+  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, videos, cloudSettings, localCurrency, localAutoComplete, rates] = await Promise.all([
+    const [pkgs, att, schedule, videos, events, cloudSettings, localCurrency, localAutoComplete, localMonthlyBudget, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
       gsGetVideos(token, spreadsheetId),
+      gsGetEvents(token, spreadsheetId),
       gsGetSettings(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       dbGetSetting<boolean>('autoCompleteClasses'),
+      dbGetSetting<number | null>('monthlyBudget'),
       loadRates(),
     ])
 
@@ -210,10 +237,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       ?? localCurrency ?? 'CAD'
     const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
       ?? localAutoComplete ?? false
+    const monthlyBudget = (cloudSettings['monthlyBudget'] as number | null | undefined)
+      ?? localMonthlyBudget ?? null
     // Sync cloud values back into IDB so next cold-start is up-to-date
     await Promise.all([
       dbSetSetting('displayCurrency', currency),
       dbSetSetting('autoCompleteClasses', autoComplete),
+      dbSetSetting('monthlyBudget', monthlyBudget),
     ])
 
     set({
@@ -221,13 +251,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       attendance: att,
       scheduledClasses: schedule,
       videos,
+      events,
       pkgSheetId,
       attSheetId,
       schedSheetId,
       videoSheetId,
+      eventsSheetId: eventsSheetId ?? 5,
       displayCurrency: currency,
       rates,
       autoCompleteClasses: autoComplete,
+      monthlyBudget,
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
@@ -282,6 +315,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       packageId,
       attendedAt: Date.now(),
       note: null,
+      rating: null,
+      learnedNote: null,
+      practiceNote: null,
     }
     await gsPutAttendance(token, spreadsheetId, record)
     set(s => ({ attendance: [record, ...s.attendance] }))
@@ -467,6 +503,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           packageId: cls.packageId,
           attendedAt: occTs,
           note: noteKey,
+          rating: null,
+          learnedNote: null,
+          practiceNote: null,
         }
         try {
           await gsPutAttendance(token, spreadsheetId, record)
@@ -633,5 +672,68 @@ export const useAppStore = create<AppState>((set, get) => ({
     await gsPutVideo(googleToken, spreadsheetId, updated)
     set(s => ({ videos: s.videos.map(v => v.id === id ? updated : v) }))
     toast.success('Video moved!')
+  },
+
+  async updateAttendance(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const record = get().attendance.find(a => a.id === id)
+    if (!record) return
+    const updated: AttendanceRecord = { ...record, ...patch }
+    await gsPutAttendance(token, spreadsheetId, updated)
+    set(s => ({ attendance: s.attendance.map(a => a.id === id ? updated : a) }))
+  },
+
+  async setMonthlyBudget(v) {
+    await dbSetSetting('monthlyBudget', v)
+    set({ monthlyBudget: v })
+    const { googleToken: token, spreadsheetId } = get()
+    if (token && spreadsheetId) {
+      gsPutSetting(token, spreadsheetId, 'monthlyBudget', v).catch(err =>
+        console.warn('Failed to sync monthlyBudget to Sheets:', err)
+      )
+    }
+  },
+
+  setSearchOpen(open) {
+    set({ isSearchOpen: open })
+  },
+
+  async addEvent(data) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const event: DanceEvent = {
+      ...data,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    await gsPutEvent(token, spreadsheetId, event)
+    set(s => ({ events: [event, ...s.events] }))
+  },
+
+  async updateEvent(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const event = get().events.find(e => e.id === id)
+    if (!event) return
+    const updated: DanceEvent = { ...event, ...patch, updatedAt: Date.now() }
+    await gsPutEvent(token, spreadsheetId, updated)
+    set(s => ({ events: s.events.map(e => e.id === id ? updated : e) }))
+  },
+
+  async deleteEvent(id) {
+    const { googleToken: token, spreadsheetId, eventsSheetId } = get()
+    if (!token || !spreadsheetId) return
+    await gsDeleteEvent(token, spreadsheetId, eventsSheetId, id)
+    set(s => ({ events: s.events.filter(e => e.id !== id) }))
+  },
+
+  openEventForm(event) {
+    set({ isEventFormOpen: true, editingEvent: event ?? null })
+  },
+
+  closeEventForm() {
+    set({ isEventFormOpen: false, editingEvent: null })
   },
 }))
