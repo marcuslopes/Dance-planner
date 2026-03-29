@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import toast from 'react-hot-toast'
-import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord } from '../types'
+import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord, DanceEvent } from '../types'
 import {
   initSpreadsheet, getSheetIds,
   gsGetPackages, gsPutPackage, gsDeletePackage,
@@ -8,6 +8,7 @@ import {
   gsGetSchedule, gsPutSchedule, gsDeleteSchedule,
   gsGetSettings, gsPutSetting,
   gsGetVideos, gsPutVideo, gsDeleteVideo,
+  gsGetEvents, gsPutEvent, gsDeleteEvent,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
@@ -21,6 +22,7 @@ interface AppState {
   attendance: AttendanceRecord[]
   scheduledClasses: ScheduledClass[]
   videos: VideoRecord[]
+  events: DanceEvent[]
   // Auth / Google
   googleToken: string | null
   spreadsheetId: string | null
@@ -28,6 +30,7 @@ interface AppState {
   attSheetId: number
   schedSheetId: number
   videoSheetId: number
+  eventsSheetId: number
   // UI
   displayCurrency: Currency
   rates: ExchangeRateCache
@@ -40,10 +43,14 @@ interface AppState {
   // Schedule modal state
   isClassFormOpen: boolean
   editingClass: ScheduledClass | null
+  // Event modal state
+  isEventFormOpen: boolean
+  editingEvent: DanceEvent | null
   // Tab navigation
   activeTab: 'packages' | 'schedule' | 'settings' | 'analytics'
   // Settings
   autoCompleteClasses: boolean
+  monthlyBudget: number | null
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
   videoUploadStatus: string
@@ -52,11 +59,13 @@ interface AppState {
   filterStyle: string | null
   // Pre-filled instructor for new package form (when opening from TeacherDetail)
   prefilledInstructor: string | null
+  // Search
+  isSearchOpen: boolean
 
   // Actions
   signIn(token: string): Promise<void>
   setSignInError(msg: string | null): void
-  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number): Promise<void>
+  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number, eventsSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
   archivePackage(id: string): Promise<void>
@@ -64,6 +73,7 @@ interface AppState {
   markAttended(packageId: string): Promise<AttendanceRecord>
   undoLastAttendance(packageId: string): Promise<void>
   deleteAttendance(id: string): Promise<void>
+  updateAttendance(id: string, patch: Pick<AttendanceRecord, 'rating' | 'learnedNote' | 'practiceNote'>): Promise<void>
   setDisplayCurrency(c: Currency): Promise<void>
   refreshRates(): Promise<void>
   openForm(pkg?: Package): void
@@ -80,11 +90,20 @@ interface AppState {
   closeClassForm(): void
   setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
+  setMonthlyBudget(v: number | null): Promise<void>
   _runAutoComplete(): Promise<void>
   uploadClassVideo(packageId: string, file: File, attendedAt: number, title?: string, notes?: string): Promise<void>
   updateVideo(id: string, patch: { title?: string; notes?: string }): Promise<void>
   deleteVideo(id: string): Promise<void>
   moveVideo(id: string, newPackageId: string, newAttendedAt: number): Promise<void>
+  // Search
+  setSearchOpen(open: boolean): void
+  // Event actions
+  addEvent(data: Omit<DanceEvent, 'id' | 'createdAt' | 'updatedAt'>): Promise<void>
+  updateEvent(id: string, patch: Partial<DanceEvent>): Promise<void>
+  deleteEvent(id: string): Promise<void>
+  openEventForm(event?: DanceEvent): void
+  closeEventForm(): void
 }
 
 // Derived helpers (pure, no store)
@@ -142,12 +161,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   attendance: [],
   scheduledClasses: [],
   videos: [],
+  events: [],
   googleToken: null,
   spreadsheetId: null,
   pkgSheetId: 0,
   attSheetId: 1,
   schedSheetId: 2,
   videoSheetId: 4,
+  eventsSheetId: 5,
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
@@ -157,14 +178,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   activePackageId: null,
   isClassFormOpen: false,
   editingClass: null,
+  isEventFormOpen: false,
+  editingEvent: null,
   activeTab: 'packages',
   autoCompleteClasses: false,
+  monthlyBudget: null,
   isVideoUploading: false,
   videoUploadProgress: 0,
   videoUploadStatus: '',
   filterTeacher: null,
   filterStyle: null,
   prefilledInstructor: null,
+  isSearchOpen: false,
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -174,11 +199,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true, signInError: null })
     try {
       const spreadsheetId = await initSpreadsheet(token)
-      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId } = await getSheetIds(token, spreadsheetId)
+      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId, events: eventsSheetId } = await getSheetIds(token, spreadsheetId)
       // Persist session — Google access tokens last ~1 hour
-      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
-      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId })
-      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId)
+      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
