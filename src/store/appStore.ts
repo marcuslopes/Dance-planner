@@ -875,6 +875,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         googleCalendarEventId = await gcCreateEvent(token, {
           title: data.title,
+          packageId: null,
           startTime: data.startTime,
           endTime: data.endTime,
           location: data.location,
@@ -909,7 +910,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (syncCalendar && token) {
       try {
-        const calData = { title: updated.title, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence }
+        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence }
         if (updated.googleCalendarEventId) {
           await gcUpdateEvent(token, updated.googleCalendarEventId, calData)
         } else {
@@ -971,9 +972,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           endDate: data.endDate,
           location: data.location,
           notes: data.notes,
-          styles: [data.style],
-          cost: data.ticketPrice,
-          baseCurrency: data.baseCurrency,
         })
         toast.success('Added to Google Calendar')
       } catch (err) {
@@ -1002,7 +1000,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (syncCalendar && token) {
       try {
-        const calData = { name: updated.title, startDate: updated.startDate, endDate: updated.endDate, location: updated.location, notes: updated.notes, styles: [updated.style], cost: updated.ticketPrice, baseCurrency: updated.baseCurrency }
+        const calData = { name: updated.title, startDate: updated.startDate, endDate: updated.endDate, location: updated.location, notes: updated.notes }
         if (updated.googleCalendarEventId) {
           await gcUpdateAllDayEvent(token, updated.googleCalendarEventId, calData)
         } else {
