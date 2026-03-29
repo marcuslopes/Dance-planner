@@ -34,6 +34,7 @@ export interface AttendanceRecord {
   rating: number | null       // 1–5
   learnedNote: string | null  // what was learned
   practiceNote: string | null // what to practice
+  title: string | null        // optional class title, e.g. "Footwork Workshop"
 }
 
 export interface DanceEvent {

@@ -132,6 +132,7 @@ function rowToAtt(row: string[]): AttendanceRecord {
     rating: row[4] ? Number(row[4]) : null,
     learnedNote: row[5] || null,
     practiceNote: row[6] || null,
+    title: row[7] || null,
   }
 }
 
@@ -144,6 +145,7 @@ function attToRow(att: AttendanceRecord): string[] {
     att.rating != null ? String(att.rating) : '',
     att.learnedNote ?? '',
     att.practiceNote ?? '',
+    att.title ?? '',
   ]
 }
 
@@ -285,7 +287,7 @@ export async function gsGetAttendance(token: string, spreadsheetId: string): Pro
 }
 
 export async function gsPutAttendance(token: string, spreadsheetId: string, att: AttendanceRecord): Promise<void> {
-  await upsertRow(token, spreadsheetId, 'attendance', 'G', attToRow(att), att.id)
+  await upsertRow(token, spreadsheetId, 'attendance', 'H', attToRow(att), att.id)
 }
 
 export async function gsDeleteAttendance(token: string, spreadsheetId: string, attSheetId: number, id: string): Promise<void> {

@@ -246,6 +246,11 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
                           <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
                             Class #{pkgAttendance.length - i}
                           </span>
+                          {rec.title && (
+                            <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-secondary)', marginLeft: 6 }}>
+                              · {rec.title}
+                            </span>
+                          )}
                           <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 10 }}>
                             {format(rec.attendedAt, 'MMM d, yyyy')}
                           </span>
