@@ -222,12 +222,13 @@ export function EventForm() {
                     type="button"
                     onClick={() => toggleStyle(s)}
                     style={{
-                      padding: '5px 13px', borderRadius: 20, border: 'none',
+                      padding: '5px 13px', borderRadius: 20,
                       background: styles.includes(s) ? '#7c3aed' : 'var(--bg-card)',
                       color: styles.includes(s) ? '#fff' : 'var(--text-secondary)',
                       fontSize: 13, fontWeight: 600, cursor: 'pointer',
                       fontFamily: 'inherit',
                       border: `1px solid ${styles.includes(s) ? '#7c3aed' : 'var(--border)'}`,
+
                       transition: 'all 150ms ease',
                     } as React.CSSProperties}
                   >
