@@ -5,16 +5,19 @@ import { CurrencySelector } from './CurrencySelector'
 import { FilterChips } from './FilterChips'
 import { TeacherCard } from './TeacherCard'
 import { TeacherDetail } from './TeacherDetail'
-import { Plus, RefreshCw } from 'lucide-react'
+import { EventCard } from './EventCard'
+import { Plus, RefreshCw, Search } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 
-type SubView = 'packages' | 'teachers'
+type SubView = 'packages' | 'teachers' | 'events'
 
 export function PackageList() {
   const {
     packages, openForm, refreshRates, isLoading,
     filterTeacher, filterStyle, setFilterTeacher, setFilterStyle,
+    setSearchOpen,
+    events, openEventForm,
   } = useAppStore()
 
   const [refreshing, setRefreshing] = useState(false)
@@ -79,6 +82,17 @@ export function PackageList() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
+              onClick={() => setSearchOpen(true)}
+              style={{
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 10, padding: 8, cursor: 'pointer', color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Search"
+            >
+              <Search size={16} />
+            </button>
+            <button
               onClick={handleRefresh}
               style={{
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
@@ -105,7 +119,7 @@ export function PackageList() {
               padding: 3,
               gap: 2,
             }}>
-              {(['packages', 'teachers'] as SubView[]).map(v => (
+              {(['packages', 'teachers', 'events'] as SubView[]).map(v => (
                 <button
                   key={v}
                   onClick={() => setView(v)}
@@ -152,8 +166,57 @@ export function PackageList() {
       </div>
 
       {/* Content */}
-      {packages.length === 0 ? (
+      {packages.length === 0 && view !== 'events' ? (
         <EmptyState onAdd={() => openForm()} />
+      ) : view === 'events' ? (
+        /* Events view */
+        (() => {
+          const now = Date.now()
+          const sorted = [...events].sort((a, b) => b.startDate - a.startDate)
+          const upcoming = sorted.filter(e => e.startDate >= now)
+          const past = sorted.filter(e => e.startDate < now)
+          return (
+            <div className="scroll-area" style={{ flex: 1, padding: '16px 16px 100px' }}>
+              {upcoming.length === 0 && past.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)', fontSize: 14 }}>
+                  No events yet — tap + to add your first workshop or social
+                </div>
+              ) : (
+                <>
+                  {upcoming.length > 0 && (
+                    <div style={{ marginBottom: 24 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                        Upcoming
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        {upcoming.map(ev => (
+                          <EventCard key={ev.id} event={ev} onClick={() => openEventForm(ev)} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {past.length > 0 && (
+                    <details style={{ marginTop: upcoming.length > 0 ? 0 : 0 }}>
+                      <summary style={{
+                        cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                        color: 'var(--text-muted)', textTransform: 'uppercase',
+                        letterSpacing: '0.06em', padding: '8px 4px', listStyle: 'none',
+                        display: 'flex', alignItems: 'center', gap: 6,
+                      }}>
+                        Past events ({past.length})
+                      </summary>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12, opacity: 0.7 }}>
+                        {past.map(ev => (
+                          <EventCard key={ev.id} event={ev} onClick={() => openEventForm(ev)} />
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })()
       ) : view === 'teachers' ? (
         /* Teachers view */
         <div className="scroll-area" style={{ flex: 1, padding: '16px 16px 100px' }}>
@@ -224,7 +287,7 @@ export function PackageList() {
 
       {/* FAB */}
       <button
-        onClick={() => openForm()}
+        onClick={() => view === 'events' ? openEventForm() : openForm()}
         style={{
           position: 'fixed',
           bottom: 'calc(64px + env(safe-area-inset-bottom) + 16px)',
@@ -242,7 +305,7 @@ export function PackageList() {
         onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)' }}
         onTouchStart={e => { e.currentTarget.style.transform = 'scale(0.92)' }}
         onTouchEnd={e => { e.currentTarget.style.transform = 'scale(1)' }}
-        aria-label="Add package"
+        aria-label={view === 'events' ? 'Add event' : 'Add package'}
       >
         <Plus size={28} strokeWidth={2.5} />
       </button>

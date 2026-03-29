@@ -6,10 +6,11 @@ import { format, isSameDay } from 'date-fns'
 import { Trash2, Pencil, X, Undo2, Video, ExternalLink, ArrowRightLeft } from 'lucide-react'
 import toast from 'react-hot-toast'
 import confetti from 'canvas-confetti'
-import type { Package, VideoRecord } from '../types'
+import type { AttendanceRecord, Package, VideoRecord } from '../types'
 import { VideoUploadModal } from './VideoUploadModal'
 import { VideoEditModal } from './VideoEditModal'
 import { VideoMoveModal } from './VideoMoveModal'
+import { ClassJournalSheet } from './ClassJournalSheet'
 
 // Guard wrapper — renders nothing when no package is active
 export function PackageDetail() {
@@ -30,6 +31,7 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
   const [uploadingForDate, setUploadingForDate] = useState<number | null>(null)
   const [editingVideo, setEditingVideo] = useState<VideoRecord | null>(null)
   const [movingVideo, setMovingVideo] = useState<VideoRecord | null>(null)
+  const [journalRecord, setJournalRecord] = useState<AttendanceRecord | null>(null)
 
   const pkgVideos = videos.filter(v => v.packageId === pkg.id)
     .sort((a, b) => b.attendedAt - a.attendedAt)
@@ -81,8 +83,9 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
 
   async function handleMark() {
     if (isComplete || isArchived) return
-    await markAttended(pkg.id)
+    const record = await markAttended(pkg.id)
     if ('vibrate' in navigator) navigator.vibrate(40)
+    setJournalRecord(record)
   }
 
   async function handleUndo() {
@@ -410,6 +413,15 @@ function PackageDetailInner({ pkg }: { pkg: Package }) {
         <VideoMoveModal
           video={movingVideo}
           onClose={() => setMovingVideo(null)}
+        />
+      )}
+
+      {/* Class journal sheet */}
+      {journalRecord && (
+        <ClassJournalSheet
+          record={journalRecord}
+          pkg={pkg}
+          onClose={() => setJournalRecord(null)}
         />
       )}
     </>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns'
+import { startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subYears, format } from 'date-fns'
 import { useAppStore, classesUsed, progressPercent } from '../store/appStore'
 import { convert, formatCurrency } from '../lib/currency'
 import { ProgressRing } from './ProgressRing'
@@ -130,20 +130,50 @@ function PackageProgressRow({ pkg, attendance }: { pkg: Package; attendance: Att
   )
 }
 
+// ─── Budget gauge sub-component ──────────────────────────────────────────────
+
+function BudgetGauge({ spent, budget, currency }: { spent: number; budget: number; currency: string }) {
+  const pct = Math.min((spent / budget) * 100, 100)
+  const color = pct >= 100 ? '#ef4444' : pct >= 75 ? '#f59e0b' : '#22c55e'
+  return (
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+        Spent this month
+      </div>
+      <div style={{ height: 8, borderRadius: 99, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 8 }}>
+        <div style={{ height: '100%', borderRadius: 99, width: `${pct}%`, background: color, transition: 'width 0.5s ease' }} />
+      </div>
+      <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+          {formatCurrency(spent, currency as Parameters<typeof formatCurrency>[1])}
+        </span>
+        {' of '}
+        {formatCurrency(budget, currency as Parameters<typeof formatCurrency>[1])}
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function AnalyticsTab() {
   const packages = useAppStore(s => s.packages)
   const attendance = useAppStore(s => s.attendance)
+  const events = useAppStore(s => s.events)
   const displayCurrency = useAppStore(s => s.displayCurrency)
   const rates = useAppStore(s => s.rates)
   const isLoading = useAppStore(s => s.isLoading)
+  const monthlyBudget = useAppStore(s => s.monthlyBudget)
 
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
   const thisMonthEnd = endOfMonth(now)
   const lastMonthStart = startOfMonth(subMonths(now, 1))
   const lastMonthEnd = endOfMonth(subMonths(now, 1))
+  const thisYearStart = startOfYear(now)
+  const thisYearEnd = endOfYear(now)
+  const lastYearStart = startOfYear(subYears(now, 1))
+  const lastYearEnd = endOfYear(subYears(now, 1))
 
   const stats = useMemo(() => {
     const totalClasses = attendance.length
@@ -167,6 +197,42 @@ export function AnalyticsTab() {
 
     // Build a packageId → package map for fast lookup
     const pkgMap = new Map<string, Package>(allPackages.map(p => [p.id, p]))
+
+    // Spending this month
+    const spentThisMonth = allPackages.reduce((sum, pkg) => {
+      const monthAtt = attendance.filter(a =>
+        a.packageId === pkg.id &&
+        a.attendedAt >= thisMonthStart.getTime() &&
+        a.attendedAt <= thisMonthEnd.getTime()
+      ).length
+      if (monthAtt === 0) return sum
+      const ppc = pkg.totalClasses > 0 ? pkg.priceAmount / pkg.totalClasses : 0
+      return sum + convert(ppc * monthAtt, pkg.baseCurrency, displayCurrency, rates.rates)
+    }, 0)
+
+    // Forecast: remaining classes across active packages
+    const forecastRemainingCost = activePackages.reduce((sum, pkg) => {
+      const used = attendance.filter(a => a.packageId === pkg.id).length
+      const remaining = Math.max(pkg.totalClasses - used, 0)
+      const ppc = pkg.totalClasses > 0 ? pkg.priceAmount / pkg.totalClasses : 0
+      return sum + convert(ppc * remaining, pkg.baseCurrency, displayCurrency, rates.rates)
+    }, 0)
+
+    // Yearly spend
+    const calcYearSpend = (start: Date, end: Date) => {
+      return allPackages.reduce((sum, pkg) => {
+        const yearAtt = attendance.filter(a =>
+          a.packageId === pkg.id &&
+          a.attendedAt >= start.getTime() &&
+          a.attendedAt <= end.getTime()
+        ).length
+        if (yearAtt === 0) return sum
+        const ppc = pkg.totalClasses > 0 ? pkg.priceAmount / pkg.totalClasses : 0
+        return sum + convert(ppc * yearAtt, pkg.baseCurrency, displayCurrency, rates.rates)
+      }, 0)
+    }
+    const thisYearSpend = calcYearSpend(thisYearStart, thisYearEnd)
+    const lastYearSpend = calcYearSpend(lastYearStart, lastYearEnd)
 
     // By teacher
     const teacherCounts = new Map<string, number>()
@@ -192,6 +258,18 @@ export function AnalyticsTab() {
       .sort((a, b) => b.count - a.count)
     const styleMax = styleBreakdown[0]?.count ?? 1
 
+    // Top rated attendance records
+    const topRated = attendance
+      .filter(a => a.rating !== null && a.rating >= 1)
+      .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+      .slice(0, 5)
+      .map(a => {
+        const pkg = pkgMap.get(a.packageId)
+        const pkgAtt = attendance.filter(x => x.packageId === a.packageId).sort((x, y) => x.attendedAt - y.attendedAt)
+        const classNum = pkgAtt.findIndex(x => x.id === a.id) + 1
+        return { record: a, pkg, classNum }
+      })
+
     return {
       totalClasses,
       totalSpent,
@@ -203,8 +281,13 @@ export function AnalyticsTab() {
       teacherMax,
       styleBreakdown,
       styleMax,
+      spentThisMonth,
+      forecastRemainingCost,
+      thisYearSpend,
+      lastYearSpend,
+      topRated,
     }
-  }, [packages, attendance, displayCurrency, rates, thisMonthStart, thisMonthEnd, lastMonthStart, lastMonthEnd])
+  }, [packages, attendance, displayCurrency, rates, thisMonthStart, thisMonthEnd, lastMonthStart, lastMonthEnd, thisYearStart, thisYearEnd, lastYearStart, lastYearEnd])
 
   if (isLoading) {
     return (
@@ -226,6 +309,8 @@ export function AnalyticsTab() {
     )
   }
 
+  const pastEventsCount = events.filter(e => e.startDate < Date.now()).length
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 100 }}>
       {/* Header */}
@@ -242,6 +327,13 @@ export function AnalyticsTab() {
         <StatCard label="Avg / Class" value={stats.totalClasses > 0 ? formatCurrency(stats.avgCostPerClass, displayCurrency) : '—'} />
       </div>
 
+      {/* Events count */}
+      {pastEventsCount > 0 && (
+        <div style={{ padding: '10px 16px 0' }}>
+          <StatCard label="Events Attended" value={pastEventsCount} sub="workshops & socials" />
+        </div>
+      )}
+
       {/* This Month */}
       <Section title={`This Month · ${format(now, 'MMMM')}`}>
         <MonthCompare
@@ -250,6 +342,53 @@ export function AnalyticsTab() {
           thisLabel={format(now, 'MMMM')}
           lastLabel={format(subMonths(now, 1), 'MMMM')}
         />
+      </Section>
+
+      {/* Spending */}
+      <Section title="Spending">
+        {monthlyBudget != null && (
+          <BudgetGauge
+            spent={stats.spentThisMonth}
+            budget={monthlyBudget}
+            currency={displayCurrency}
+          />
+        )}
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16, marginBottom: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+            Forecast
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>
+            {formatCurrency(stats.forecastRemainingCost, displayCurrency)}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+            Remaining across active packages
+          </div>
+        </div>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Yearly
+          </div>
+          {[
+            { label: String(now.getFullYear()), amount: stats.thisYearSpend, color: '#7c3aed' },
+            { label: String(now.getFullYear() - 1), amount: stats.lastYearSpend, color: 'rgba(124,58,237,0.35)' },
+          ].map(({ label, amount, color }) => {
+            const maxAmt = Math.max(stats.thisYearSpend, stats.lastYearSpend, 1)
+            const pct = (amount / maxAmt) * 100
+            return (
+              <div key={label} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                  <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 500 }}>{label}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatCurrency(amount, displayCurrency)}
+                  </span>
+                </div>
+                <div style={{ height: 6, borderRadius: 99, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 99, width: `${pct}%`, background: color, opacity: 0.8, transition: 'width 0.5s ease' }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </Section>
 
       {/* By Teacher */}
@@ -280,6 +419,48 @@ export function AnalyticsTab() {
           {stats.activePackages.map(pkg => (
             <PackageProgressRow key={pkg.id} pkg={pkg} attendance={attendance} />
           ))}
+        </Section>
+      )}
+
+      {/* Top Rated Classes */}
+      {stats.topRated.length > 0 && (
+        <Section title="Top Rated">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {stats.topRated.map(({ record, pkg, classNum }) => (
+              <div key={record.id} style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 14, padding: '12px 14px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Class #{classNum}
+                    </span>
+                    {pkg && (
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 8 }}>
+                        {pkg.instructorName} · {pkg.label}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 1 }}>
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <span key={s} style={{
+                        fontSize: 14,
+                        color: record.rating !== null && s <= record.rating
+                          ? (pkg?.color ?? '#7c3aed')
+                          : 'var(--border)',
+                      }}>★</span>
+                    ))}
+                  </div>
+                </div>
+                {record.learnedNote && (
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                    {record.learnedNote.length > 100 ? record.learnedNote.slice(0, 100) + '…' : record.learnedNote}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </Section>
       )}
     </div>

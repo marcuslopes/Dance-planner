@@ -217,16 +217,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId) {
+  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, videos, cloudSettings, localCurrency, localAutoComplete, rates] = await Promise.all([
+    const [pkgs, att, schedule, videos, events, cloudSettings, localCurrency, localAutoComplete, localMonthlyBudget, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
       gsGetVideos(token, spreadsheetId),
+      gsGetEvents(token, spreadsheetId),
       gsGetSettings(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       dbGetSetting<boolean>('autoCompleteClasses'),
+      dbGetSetting<number | null>('monthlyBudget'),
       loadRates(),
     ])
 
@@ -235,10 +237,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       ?? localCurrency ?? 'CAD'
     const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
       ?? localAutoComplete ?? false
+    const monthlyBudget = (cloudSettings['monthlyBudget'] as number | null | undefined)
+      ?? localMonthlyBudget ?? null
     // Sync cloud values back into IDB so next cold-start is up-to-date
     await Promise.all([
       dbSetSetting('displayCurrency', currency),
       dbSetSetting('autoCompleteClasses', autoComplete),
+      dbSetSetting('monthlyBudget', monthlyBudget),
     ])
 
     set({
@@ -246,13 +251,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       attendance: att,
       scheduledClasses: schedule,
       videos,
+      events,
       pkgSheetId,
       attSheetId,
       schedSheetId,
       videoSheetId,
+      eventsSheetId: eventsSheetId ?? 5,
       displayCurrency: currency,
       rates,
       autoCompleteClasses: autoComplete,
+      monthlyBudget,
       isLoading: false,
     })
     if (autoComplete) await get()._runAutoComplete()
@@ -307,6 +315,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       packageId,
       attendedAt: Date.now(),
       note: null,
+      rating: null,
+      learnedNote: null,
+      practiceNote: null,
     }
     await gsPutAttendance(token, spreadsheetId, record)
     set(s => ({ attendance: [record, ...s.attendance] }))
@@ -492,6 +503,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           packageId: cls.packageId,
           attendedAt: occTs,
           note: noteKey,
+          rating: null,
+          learnedNote: null,
+          practiceNote: null,
         }
         try {
           await gsPutAttendance(token, spreadsheetId, record)
@@ -658,5 +672,68 @@ export const useAppStore = create<AppState>((set, get) => ({
     await gsPutVideo(googleToken, spreadsheetId, updated)
     set(s => ({ videos: s.videos.map(v => v.id === id ? updated : v) }))
     toast.success('Video moved!')
+  },
+
+  async updateAttendance(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const record = get().attendance.find(a => a.id === id)
+    if (!record) return
+    const updated: AttendanceRecord = { ...record, ...patch }
+    await gsPutAttendance(token, spreadsheetId, updated)
+    set(s => ({ attendance: s.attendance.map(a => a.id === id ? updated : a) }))
+  },
+
+  async setMonthlyBudget(v) {
+    await dbSetSetting('monthlyBudget', v)
+    set({ monthlyBudget: v })
+    const { googleToken: token, spreadsheetId } = get()
+    if (token && spreadsheetId) {
+      gsPutSetting(token, spreadsheetId, 'monthlyBudget', v).catch(err =>
+        console.warn('Failed to sync monthlyBudget to Sheets:', err)
+      )
+    }
+  },
+
+  setSearchOpen(open) {
+    set({ isSearchOpen: open })
+  },
+
+  async addEvent(data) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const event: DanceEvent = {
+      ...data,
+      id: crypto.randomUUID(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    await gsPutEvent(token, spreadsheetId, event)
+    set(s => ({ events: [event, ...s.events] }))
+  },
+
+  async updateEvent(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const event = get().events.find(e => e.id === id)
+    if (!event) return
+    const updated: DanceEvent = { ...event, ...patch, updatedAt: Date.now() }
+    await gsPutEvent(token, spreadsheetId, updated)
+    set(s => ({ events: s.events.map(e => e.id === id ? updated : e) }))
+  },
+
+  async deleteEvent(id) {
+    const { googleToken: token, spreadsheetId, eventsSheetId } = get()
+    if (!token || !spreadsheetId) return
+    await gsDeleteEvent(token, spreadsheetId, eventsSheetId, id)
+    set(s => ({ events: s.events.filter(e => e.id !== id) }))
+  },
+
+  openEventForm(event) {
+    set({ isEventFormOpen: true, editingEvent: event ?? null })
+  },
+
+  closeEventForm() {
+    set({ isEventFormOpen: false, editingEvent: null })
   },
 }))
