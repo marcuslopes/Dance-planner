@@ -12,6 +12,10 @@ import { AuthGate } from './components/AuthGate'
 import { UploadProgressBar } from './components/UploadProgressBar'
 import { SearchOverlay } from './components/SearchOverlay'
 import { EventForm } from './components/EventForm'
+import { TeachingTab } from './components/TeachingTab'
+import { TeacherClassForm } from './components/TeacherClassForm'
+import { WorkshopForm } from './components/WorkshopForm'
+import { InscriptionForm } from './components/InscriptionForm'
 import { useAppStore } from './store/appStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -56,10 +60,14 @@ function AppInner() {
       {activeTab === 'schedule' && <ScheduleTab />}
       {activeTab === 'settings' && <SettingsTab />}
       {activeTab === 'analytics' && <AnalyticsTab />}
+      {activeTab === 'teaching' && <TeachingTab />}
       <PackageDetail />
       <PackageForm />
       <ClassForm />
       <EventForm />
+      <TeacherClassForm />
+      <WorkshopForm />
+      <InscriptionForm />
       <SearchOverlay />
       <BottomNav />
       <UploadProgressBar />

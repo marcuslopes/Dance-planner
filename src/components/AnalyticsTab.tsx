@@ -164,6 +164,10 @@ export function AnalyticsTab() {
   const rates = useAppStore(s => s.rates)
   const isLoading = useAppStore(s => s.isLoading)
   const monthlyBudget = useAppStore(s => s.monthlyBudget)
+  const teacherModeEnabled = useAppStore(s => s.teacherModeEnabled)
+  const teacherClasses = useAppStore(s => s.teacherClasses)
+  const workshops = useAppStore(s => s.workshops)
+  const inscriptions = useAppStore(s => s.inscriptions)
 
   const now = new Date()
   const thisMonthStart = startOfMonth(now)
@@ -174,6 +178,23 @@ export function AnalyticsTab() {
   const thisYearEnd = endOfYear(now)
   const lastYearStart = startOfYear(subYears(now, 1))
   const lastYearEnd = endOfYear(subYears(now, 1))
+
+  const teachingStats = useMemo(() => {
+    const activeClasses = teacherClasses.filter(c => !c.archivedAt)
+    const totalStudents = inscriptions.length
+    const paidStudents = inscriptions.filter(i => i.paymentStatus === 'paid').length
+    const unpaidStudents = inscriptions.filter(i => i.paymentStatus === 'unpaid').length
+    const totalRevenue = inscriptions.reduce((sum, i) => sum + (i.amountPaid ?? 0), 0)
+    const now = Date.now()
+    const upcomingWorkshops = workshops.filter(w => (w.endDate ?? w.startDate) >= now).length
+    // Revenue this month
+    const monthStart = startOfMonth(new Date()).getTime()
+    const monthEnd = endOfMonth(new Date()).getTime()
+    const revenueThisMonth = inscriptions
+      .filter(i => i.updatedAt >= monthStart && i.updatedAt <= monthEnd && i.amountPaid != null)
+      .reduce((sum, i) => sum + (i.amountPaid ?? 0), 0)
+    return { activeClasses, totalStudents, paidStudents, unpaidStudents, totalRevenue, upcomingWorkshops, revenueThisMonth }
+  }, [teacherClasses, workshops, inscriptions])
 
   const stats = useMemo(() => {
     const totalClasses = attendance.length
@@ -461,6 +482,33 @@ export function AnalyticsTab() {
               </div>
             ))}
           </div>
+        </Section>
+      )}
+
+      {/* Teaching Stats */}
+      {teacherModeEnabled && (teachingStats.activeClasses.length > 0 || workshops.length > 0) && (
+        <Section title="Teaching">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <StatCard label="Active Classes" value={teachingStats.activeClasses.length} />
+            <StatCard label="Workshops" value={workshops.length} sub={teachingStats.upcomingWorkshops > 0 ? `${teachingStats.upcomingWorkshops} upcoming` : undefined} />
+            <StatCard label="Students" value={teachingStats.totalStudents} />
+            <StatCard label="Unpaid" value={teachingStats.unpaidStudents} sub={teachingStats.paidStudents > 0 ? `${teachingStats.paidStudents} paid` : undefined} />
+          </div>
+          {teachingStats.totalRevenue > 0 && (
+            <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                Revenue collected
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 800, color: '#10b981', fontVariantNumeric: 'tabular-nums' }}>
+                {teachingStats.totalRevenue.toFixed(2)}
+              </div>
+              {teachingStats.revenueThisMonth > 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  {teachingStats.revenueThisMonth.toFixed(2)} this month
+                </div>
+              )}
+            </div>
+          )}
         </Section>
       )}
     </div>

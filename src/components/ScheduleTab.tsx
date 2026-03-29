@@ -2,7 +2,61 @@ import { format, isToday, isTomorrow, startOfDay } from 'date-fns'
 import { useAppStore, getUniqueTeachers } from '../store/appStore'
 import { ClassEventCard } from './ClassEventCard'
 import { FilterChips } from './FilterChips'
-import type { ScheduledClass } from '../types'
+import { expandOccurrences } from '../lib/recurrence'
+import type { ScheduledClass, TeacherClass } from '../types'
+
+// ── Teaching class card (inline, schedule view only) ─────────────────────────
+function TeachingClassItem({ tc, startTime, endTime, onClick }: {
+  tc: TeacherClass
+  startTime: number
+  endTime: number
+  onClick: () => void
+}) {
+  const timeRange = `${format(new Date(startTime), 'h:mm a')} – ${format(new Date(endTime), 'h:mm a')}`
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%', background: 'var(--bg-elevated)',
+        border: '1px solid var(--border)',
+        borderLeft: `3px solid ${tc.color}`,
+        borderRadius: 12, padding: '12px 14px',
+        display: 'flex', flexDirection: 'column', gap: 4,
+        cursor: 'pointer', textAlign: 'left',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {tc.title}
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+          background: `${tc.color}22`, color: tc.color, flexShrink: 0,
+        }}>Teaching</span>
+      </div>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>{tc.style}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)', fontSize: 12 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        {timeRange}
+      </div>
+      {tc.location && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'var(--text-muted)', fontSize: 12 }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          {tc.location}
+        </div>
+      )}
+    </button>
+  )
+}
+
+// A unified item for the schedule view — either a student class or a teacher class occurrence
+type ScheduleItem =
+  | { kind: 'student'; cls: ScheduledClass }
+  | { kind: 'teaching'; tc: TeacherClass; startTime: number; endTime: number }
 
 function dateGroupLabel(epochMs: number): string {
   const d = new Date(epochMs)
@@ -11,20 +65,31 @@ function dateGroupLabel(epochMs: number): string {
   return format(d, 'EEEE, MMM d')
 }
 
-function groupByDay(classes: ScheduledClass[]): [string, ScheduledClass[]][] {
-  const map = new Map<string, ScheduledClass[]>()
-  for (const cls of classes) {
-    const key = startOfDay(new Date(cls.startTime)).toISOString()
+function groupByDay(items: ScheduleItem[]): [string, ScheduleItem[]][] {
+  const map = new Map<string, ScheduleItem[]>()
+  for (const item of items) {
+    const ts = item.kind === 'student' ? item.cls.startTime : item.startTime
+    const key = startOfDay(new Date(ts)).toISOString()
     if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(cls)
+    map.get(key)!.push(item)
   }
   return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+}
+
+function itemStartTime(item: ScheduleItem): number {
+  return item.kind === 'student' ? item.cls.startTime : item.startTime
+}
+function itemEndTime(item: ScheduleItem): number {
+  return item.kind === 'student' ? item.cls.endTime : item.endTime
 }
 
 export function ScheduleTab() {
   const scheduledClasses = useAppStore(s => s.scheduledClasses)
   const packages = useAppStore(s => s.packages)
+  const teacherClasses = useAppStore(s => s.teacherClasses)
+  const teacherModeEnabled = useAppStore(s => s.teacherModeEnabled)
   const openClassForm = useAppStore(s => s.openClassForm)
+  const openTeacherClassForm = useAppStore(s => s.openTeacherClassForm)
   const isLoading = useAppStore(s => s.isLoading)
   const filterTeacher = useAppStore(s => s.filterTeacher)
   const filterStyle = useAppStore(s => s.filterStyle)
@@ -32,6 +97,7 @@ export function ScheduleTab() {
   const setFilterStyle = useAppStore(s => s.setFilterStyle)
 
   const now = Date.now()
+  const lookahead = now + 180 * 24 * 60 * 60 * 1000 // 6 months ahead
 
   const pkgMap = Object.fromEntries(packages.map(p => [p.id, p]))
 
@@ -39,8 +105,6 @@ export function ScheduleTab() {
   const uniqueStyles = [...new Set(packages.map(p => p.label.trim()).filter(Boolean))].sort()
   const showFilters = scheduledClasses.length > 0 && (teachers.length >= 2 || uniqueStyles.length >= 2)
 
-  // Apply filters: a class passes if it has no package (standalone, shown always)
-  // or its linked package matches both active filters
   function classMatchesFilters(cls: ScheduledClass): boolean {
     if (!cls.packageId) return true
     const pkg = pkgMap[cls.packageId]
@@ -50,11 +114,44 @@ export function ScheduleTab() {
     return true
   }
 
-  const upcoming = scheduledClasses.filter(c => c.endTime >= now && classMatchesFilters(c))
-  const past = scheduledClasses.filter(c => c.endTime < now && classMatchesFilters(c)).slice(0, 10)
+  // Build teaching items from teacher classes (expand recurring occurrences)
+  const teachingItems: ScheduleItem[] = teacherModeEnabled
+    ? teacherClasses
+        .filter(tc => !tc.archivedAt)
+        .flatMap(tc => {
+          if (tc.recurrence) {
+            const duration = tc.endTime - tc.startTime
+            const asScheduled = {
+              id: tc.id, packageId: null, title: tc.title,
+              startTime: tc.startTime, endTime: tc.endTime,
+              location: tc.location, recurrence: tc.recurrence,
+              googleCalendarEventId: tc.googleCalendarEventId, notes: tc.notes,
+              createdAt: tc.createdAt, updatedAt: tc.updatedAt,
+            }
+            return expandOccurrences(asScheduled, lookahead)
+              .map(startTime => ({ kind: 'teaching' as const, tc, startTime, endTime: startTime + duration }))
+          }
+          return [{ kind: 'teaching' as const, tc, startTime: tc.startTime, endTime: tc.endTime }]
+        })
+    : []
+
+  // Merge student classes and teaching items
+  const studentItems: ScheduleItem[] = scheduledClasses
+    .filter(classMatchesFilters)
+    .map(cls => ({ kind: 'student' as const, cls }))
+
+  const allItems: ScheduleItem[] = [...studentItems, ...teachingItems]
+
+  const upcoming = allItems.filter(item => itemEndTime(item) >= now)
+    .sort((a, b) => itemStartTime(a) - itemStartTime(b))
+  const past = allItems.filter(item => itemEndTime(item) < now)
+    .sort((a, b) => itemStartTime(b) - itemStartTime(a))
+    .slice(0, 10)
 
   const upcomingGroups = groupByDay(upcoming)
   const pastGroups = groupByDay(past.slice().reverse()).reverse()
+
+  const hasAnyClasses = scheduledClasses.length > 0 || (teacherModeEnabled && teacherClasses.length > 0)
 
   return (
     <div style={{
@@ -108,7 +205,7 @@ export function ScheduleTab() {
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
           <span style={{ fontSize: 32 }}>💃</span>
         </div>
-      ) : scheduledClasses.length === 0 ? (
+      ) : !hasAnyClasses ? (
         // Empty state
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -146,18 +243,26 @@ export function ScheduleTab() {
               <div style={{ padding: '16px 4px 8px', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
                 Upcoming
               </div>
-              {upcomingGroups.map(([dayKey, classes]) => (
+              {upcomingGroups.map(([dayKey, items]) => (
                 <div key={dayKey} style={{ marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, paddingLeft: 4 }}>
                     {dateGroupLabel(new Date(dayKey).getTime())}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {classes.map(cls => (
+                    {items.map(item => item.kind === 'student' ? (
                       <ClassEventCard
-                        key={cls.id}
-                        cls={cls}
-                        pkg={cls.packageId ? pkgMap[cls.packageId] : undefined}
-                        onClick={() => openClassForm(cls)}
+                        key={`s-${item.cls.id}`}
+                        cls={item.cls}
+                        pkg={item.cls.packageId ? pkgMap[item.cls.packageId] : undefined}
+                        onClick={() => openClassForm(item.cls)}
+                      />
+                    ) : (
+                      <TeachingClassItem
+                        key={`t-${item.tc.id}-${item.startTime}`}
+                        tc={item.tc}
+                        startTime={item.startTime}
+                        endTime={item.endTime}
+                        onClick={() => openTeacherClassForm(item.tc)}
                       />
                     ))}
                   </div>
@@ -172,18 +277,26 @@ export function ScheduleTab() {
               <div style={{ padding: '8px 4px 8px', fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: 1, textTransform: 'uppercase' }}>
                 Recent
               </div>
-              {pastGroups.map(([dayKey, classes]) => (
+              {pastGroups.map(([dayKey, items]) => (
                 <div key={dayKey} style={{ marginBottom: 20, opacity: 0.6 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, paddingLeft: 4 }}>
                     {format(new Date(dayKey), 'EEEE, MMM d')}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {classes.map(cls => (
+                    {items.map(item => item.kind === 'student' ? (
                       <ClassEventCard
-                        key={cls.id}
-                        cls={cls}
-                        pkg={cls.packageId ? pkgMap[cls.packageId] : undefined}
-                        onClick={() => openClassForm(cls)}
+                        key={`s-${item.cls.id}`}
+                        cls={item.cls}
+                        pkg={item.cls.packageId ? pkgMap[item.cls.packageId] : undefined}
+                        onClick={() => openClassForm(item.cls)}
+                      />
+                    ) : (
+                      <TeachingClassItem
+                        key={`t-${item.tc.id}-${item.startTime}`}
+                        tc={item.tc}
+                        startTime={item.startTime}
+                        endTime={item.endTime}
+                        onClick={() => openTeacherClassForm(item.tc)}
                       />
                     ))}
                   </div>
@@ -209,7 +322,7 @@ export function ScheduleTab() {
       )}
 
       {/* FAB */}
-      {scheduledClasses.length > 0 && (
+      {hasAnyClasses && (
         <button
           onClick={() => openClassForm()}
           style={{

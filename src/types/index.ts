@@ -75,6 +75,58 @@ export const DANCE_STYLES = [
   'Ballroom', 'Contemporary', 'Ballet', 'Jazz', 'Hip-Hop', 'Other',
 ] as const
 
+// ── Teacher Mode types ────────────────────────────────────────────────────────
+
+export interface TeacherClass {
+  id: string
+  title: string
+  style: string
+  location: string | null
+  startTime: number              // epoch ms – first occurrence
+  endTime: number                // epoch ms – first occurrence
+  recurrence: RecurrenceRule | null
+  pricePerStudent: number | null
+  baseCurrency: Currency | null
+  color: string                  // hex accent
+  notes: string | null
+  googleCalendarEventId: string | null
+  createdAt: number
+  updatedAt: number
+  archivedAt: number | null
+}
+
+export interface Workshop {
+  id: string
+  title: string
+  style: string
+  startDate: number              // epoch ms
+  endDate: number | null         // epoch ms
+  location: string | null
+  ticketPrice: number | null
+  baseCurrency: Currency | null
+  maxCapacity: number | null
+  notes: string | null
+  googleCalendarEventId: string | null
+  createdAt: number
+  updatedAt: number
+}
+
+export type InscriptionPaymentStatus = 'unpaid' | 'partial' | 'paid'
+
+export interface Inscription {
+  id: string
+  teacherClassId: string | null  // exactly one is non-null
+  workshopId: string | null
+  studentName: string
+  contactInfo: string | null     // phone or email, free text
+  paymentStatus: InscriptionPaymentStatus
+  amountPaid: number | null
+  baseCurrency: Currency | null
+  notes: string | null
+  enrolledAt: number
+  updatedAt: number
+}
+
 // ── Schedule / Calendar types ─────────────────────────────────────────────────
 
 export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly'
