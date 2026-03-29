@@ -14,7 +14,8 @@ function toDateInput(ts: number | null): string {
 
 function fromDateInput(s: string): number | null {
   if (!s) return null
-  return new Date(s).getTime()
+  const [year, month, day] = s.split('-').map(Number)
+  return new Date(year, month - 1, day).getTime()
 }
 
 export function EventForm() {
