@@ -1,4 +1,4 @@
-import { CalendarDays } from 'lucide-react'
+import { CalendarDays, CalendarCheck } from 'lucide-react'
 import { format, isSameDay } from 'date-fns'
 import { formatCurrency } from '../lib/currency'
 import type { DanceEvent } from '../types'
@@ -53,8 +53,11 @@ export function EventCard({ event, onClick }: Props) {
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {event.name}
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: event.location || event.cost != null || event.styles.length > 0 ? 6 : 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-secondary)', marginBottom: event.location || event.cost != null || event.styles.length > 0 ? 6 : 0 }}>
           {formatDateRange(event.startDate, event.endDate)}
+          {event.googleCalendarEventId && (
+            <CalendarCheck size={13} style={{ color: '#7c3aed', flexShrink: 0 }} title="Synced to Google Calendar" />
+          )}
         </div>
 
         {event.location && (

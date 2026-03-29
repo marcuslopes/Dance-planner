@@ -46,6 +46,7 @@ export interface DanceEvent {
   baseCurrency: Currency | null
   styles: string[]          // subset of DANCE_STYLES
   notes: string | null
+  googleCalendarEventId: string | null
   createdAt: number
   updatedAt: number
 }

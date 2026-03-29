@@ -10,7 +10,7 @@ import {
   gsGetVideos, gsPutVideo, gsDeleteVideo,
   gsGetEvents, gsPutEvent, gsDeleteEvent,
 } from '../lib/googleSheets'
-import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent } from '../lib/googleCalendar'
+import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent, gcCreateAllDayEvent, gcUpdateAllDayEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
@@ -99,8 +99,8 @@ interface AppState {
   // Search
   setSearchOpen(open: boolean): void
   // Event actions
-  addEvent(data: Omit<DanceEvent, 'id' | 'createdAt' | 'updatedAt'>): Promise<void>
-  updateEvent(id: string, patch: Partial<DanceEvent>): Promise<void>
+  addEvent(data: Omit<DanceEvent, 'id' | 'createdAt' | 'updatedAt'>, addToCalendar?: boolean): Promise<void>
+  updateEvent(id: string, patch: Partial<DanceEvent>, syncCalendar?: boolean): Promise<void>
   deleteEvent(id: string): Promise<void>
   openEventForm(event?: DanceEvent): void
   closeEventForm(): void
@@ -699,11 +699,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isSearchOpen: open })
   },
 
-  async addEvent(data) {
+  async addEvent(data, addToCalendar = false) {
     const { googleToken: token, spreadsheetId } = get()
     if (!token || !spreadsheetId) return
+    let googleCalendarEventId: string | null = null
+    if (addToCalendar) {
+      try {
+        googleCalendarEventId = await gcCreateAllDayEvent(token, data)
+      } catch (err) {
+        console.warn('Calendar sync failed:', err)
+      }
+    }
     const event: DanceEvent = {
       ...data,
+      googleCalendarEventId,
       id: crypto.randomUUID(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -712,12 +721,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(s => ({ events: [event, ...s.events] }))
   },
 
-  async updateEvent(id, patch) {
+  async updateEvent(id, patch, syncCalendar = false) {
     const { googleToken: token, spreadsheetId } = get()
     if (!token || !spreadsheetId) return
     const event = get().events.find(e => e.id === id)
     if (!event) return
     const updated: DanceEvent = { ...event, ...patch, updatedAt: Date.now() }
+    if (token && syncCalendar) {
+      try {
+        if (updated.googleCalendarEventId) {
+          await gcUpdateAllDayEvent(token, updated.googleCalendarEventId, updated)
+        } else {
+          updated.googleCalendarEventId = await gcCreateAllDayEvent(token, updated)
+        }
+      } catch (err) {
+        console.warn('Calendar sync failed:', err)
+      }
+    }
     await gsPutEvent(token, spreadsheetId, updated)
     set(s => ({ events: s.events.map(e => e.id === id ? updated : e) }))
   },
@@ -725,6 +745,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   async deleteEvent(id) {
     const { googleToken: token, spreadsheetId, eventsSheetId } = get()
     if (!token || !spreadsheetId) return
+    const event = get().events.find(e => e.id === id)
+    if (event?.googleCalendarEventId && token) {
+      try { await gcDeleteEvent(token, event.googleCalendarEventId) } catch { /* ignore */ }
+    }
     await gsDeleteEvent(token, spreadsheetId, eventsSheetId, id)
     set(s => ({ events: s.events.filter(e => e.id !== id) }))
   },
