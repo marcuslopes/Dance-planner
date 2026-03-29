@@ -82,17 +82,6 @@ export function PackageList() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
-              onClick={() => setSearchOpen(true)}
-              style={{
-                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: 8, cursor: 'pointer', color: 'var(--text-secondary)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-              title="Search"
-            >
-              <Search size={16} />
-            </button>
-            <button
               onClick={handleRefresh}
               style={{
                 background: 'var(--bg-elevated)', border: '1px solid var(--border)',
@@ -111,7 +100,7 @@ export function PackageList() {
 
         {/* Sub-view toggle */}
         {packages.length > 0 && (
-          <div style={{ padding: '0 20px 12px' }}>
+          <div style={{ padding: '0 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{
               display: 'inline-flex',
               background: 'var(--bg-card)',
@@ -139,6 +128,17 @@ export function PackageList() {
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setSearchOpen(true)}
+              style={{
+                background: 'var(--bg-elevated)', border: '1px solid var(--border)',
+                borderRadius: 10, padding: 7, cursor: 'pointer', color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+              title="Search"
+            >
+              <Search size={15} />
+            </button>
           </div>
         )}
 
