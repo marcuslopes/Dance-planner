@@ -1,4 +1,4 @@
-import type { Package, AttendanceRecord, ScheduledClass, VideoRecord, DanceEvent, Currency } from '../types'
+import type { Package, AttendanceRecord, ScheduledClass, VideoRecord, DanceEvent, Currency, TeacherClass, Workshop, Inscription } from '../types'
 
 const SHEETS_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const DRIVE_BASE = 'https://www.googleapis.com/drive/v3/files'
@@ -39,7 +39,7 @@ export async function initSpreadsheet(token: string): Promise<string> {
     return list.files[0].id as string
   }
 
-  // Create new spreadsheet with all six sheets
+  // Create new spreadsheet with all nine sheets
   const body = {
     properties: { title: SPREADSHEET_NAME },
     sheets: [
@@ -49,6 +49,9 @@ export async function initSpreadsheet(token: string): Promise<string> {
       { properties: { title: 'settings', index: 3 } },
       { properties: { title: 'videos', index: 4 } },
       { properties: { title: 'events', index: 5 } },
+      { properties: { title: 'teacher_classes', index: 6 } },
+      { properties: { title: 'workshops', index: 7 } },
+      { properties: { title: 'inscriptions', index: 8 } },
     ],
   }
   const created = await gFetch(SHEETS_BASE, token, { method: 'POST', body: JSON.stringify(body) })
@@ -83,6 +86,18 @@ export async function initSpreadsheet(token: string): Promise<string> {
         {
           range: 'events!A1:L1',
           values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at']],
+        },
+        {
+          range: 'teacher_classes!A1:P1',
+          values: [['id', 'title', 'style', 'location', 'start_time', 'end_time', 'recurrence_json', 'price_per_student', 'base_currency', 'color', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at', 'archived_at']],
+        },
+        {
+          range: 'workshops!A1:M1',
+          values: [['id', 'title', 'style', 'start_date', 'end_date', 'location', 'ticket_price', 'base_currency', 'max_capacity', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at']],
+        },
+        {
+          range: 'inscriptions!A1:K1',
+          values: [['id', 'teacher_class_id', 'workshop_id', 'student_name', 'contact_info', 'payment_status', 'amount_paid', 'base_currency', 'notes', 'enrolled_at', 'updated_at']],
         },
       ],
     }),
@@ -213,12 +228,12 @@ async function deleteRow(token: string, spreadsheetId: string, sheetId: number, 
 export async function getSheetIds(
   token: string,
   spreadsheetId: string,
-): Promise<{ packages: number; attendance: number; schedule: number; videos: number; events: number }> {
+): Promise<{ packages: number; attendance: number; schedule: number; videos: number; events: number; teacherClasses: number; workshops: number; inscriptions: number }> {
   const data = await gFetch(`${SHEETS_BASE}/${spreadsheetId}?fields=sheets.properties`, token)
   let sheets = data.sheets as Array<{ properties: { title: string; sheetId: number } }>
 
   // Provision missing sheets for existing spreadsheets
-  const REQUIRED = ['schedule', 'settings', 'videos', 'events'] as const
+  const REQUIRED = ['schedule', 'settings', 'videos', 'events', 'teacher_classes', 'workshops', 'inscriptions'] as const
   const missing = REQUIRED.filter(name => !sheets.find(s => s.properties.title === name))
 
   if (missing.length > 0) {
@@ -244,6 +259,15 @@ export async function getSheetIds(
     if (missing.includes('events')) {
       headerData.push({ range: 'events!A1:K1', values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'created_at', 'updated_at']] })
     }
+    if (missing.includes('teacher_classes')) {
+      headerData.push({ range: 'teacher_classes!A1:P1', values: [['id', 'title', 'style', 'location', 'start_time', 'end_time', 'recurrence_json', 'price_per_student', 'base_currency', 'color', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at', 'archived_at']] })
+    }
+    if (missing.includes('workshops')) {
+      headerData.push({ range: 'workshops!A1:M1', values: [['id', 'title', 'style', 'start_date', 'end_date', 'location', 'ticket_price', 'base_currency', 'max_capacity', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at']] })
+    }
+    if (missing.includes('inscriptions')) {
+      headerData.push({ range: 'inscriptions!A1:K1', values: [['id', 'teacher_class_id', 'workshop_id', 'student_name', 'contact_info', 'payment_status', 'amount_paid', 'base_currency', 'notes', 'enrolled_at', 'updated_at']] })
+    }
     if (headerData.length > 0) {
       await gFetch(`${SHEETS_BASE}/${spreadsheetId}/values:batchUpdate`, token, {
         method: 'POST',
@@ -261,6 +285,9 @@ export async function getSheetIds(
     schedule: sheets.find(s => s.properties.title === 'schedule')?.properties.sheetId ?? 2,
     videos: sheets.find(s => s.properties.title === 'videos')?.properties.sheetId ?? 4,
     events: sheets.find(s => s.properties.title === 'events')?.properties.sheetId ?? 5,
+    teacherClasses: sheets.find(s => s.properties.title === 'teacher_classes')?.properties.sheetId ?? 6,
+    workshops: sheets.find(s => s.properties.title === 'workshops')?.properties.sheetId ?? 7,
+    inscriptions: sheets.find(s => s.properties.title === 'inscriptions')?.properties.sheetId ?? 8,
   }
 }
 
@@ -468,4 +495,172 @@ export async function gsDeleteEvent(
   id: string,
 ): Promise<void> {
   await deleteRow(token, spreadsheetId, eventsSheetId, 'events', id)
+}
+
+// ── TeacherClass ──────────────────────────────────────────────────────────────
+
+function rowToTeacherClass(row: string[]): TeacherClass {
+  return {
+    id: row[0],
+    title: row[1],
+    style: row[2],
+    location: row[3] || null,
+    startTime: Number(row[4]),
+    endTime: Number(row[5]),
+    recurrence: row[6] ? JSON.parse(row[6]) : null,
+    pricePerStudent: row[7] ? Number(row[7]) : null,
+    baseCurrency: (row[8] as Currency) || null,
+    color: row[9] || '#7c3aed',
+    notes: row[10] || null,
+    googleCalendarEventId: row[11] || null,
+    createdAt: Number(row[12]),
+    updatedAt: Number(row[13]),
+    archivedAt: row[14] ? Number(row[14]) : null,
+  }
+}
+
+function teacherClassToRow(tc: TeacherClass): string[] {
+  return [
+    tc.id,
+    tc.title,
+    tc.style,
+    tc.location ?? '',
+    String(tc.startTime),
+    String(tc.endTime),
+    tc.recurrence ? JSON.stringify(tc.recurrence) : '',
+    tc.pricePerStudent != null ? String(tc.pricePerStudent) : '',
+    tc.baseCurrency ?? '',
+    tc.color,
+    tc.notes ?? '',
+    tc.googleCalendarEventId ?? '',
+    String(tc.createdAt),
+    String(tc.updatedAt),
+    tc.archivedAt != null ? String(tc.archivedAt) : '',
+  ]
+}
+
+export async function gsGetTeacherClasses(token: string, spreadsheetId: string): Promise<TeacherClass[]> {
+  const rows = await getRows(token, spreadsheetId, 'teacher_classes')
+  return rows.filter(r => r[0]).map(rowToTeacherClass).sort((a, b) => b.createdAt - a.createdAt)
+}
+
+export async function gsPutTeacherClass(token: string, spreadsheetId: string, tc: TeacherClass): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'teacher_classes', 'O', teacherClassToRow(tc), tc.id)
+}
+
+export async function gsDeleteTeacherClass(
+  token: string,
+  spreadsheetId: string,
+  sheetId: number,
+  id: string,
+): Promise<void> {
+  await deleteRow(token, spreadsheetId, sheetId, 'teacher_classes', id)
+}
+
+// ── Workshop ──────────────────────────────────────────────────────────────────
+
+function rowToWorkshop(row: string[]): Workshop {
+  return {
+    id: row[0],
+    title: row[1],
+    style: row[2],
+    startDate: Number(row[3]),
+    endDate: row[4] ? Number(row[4]) : null,
+    location: row[5] || null,
+    ticketPrice: row[6] ? Number(row[6]) : null,
+    baseCurrency: (row[7] as Currency) || null,
+    maxCapacity: row[8] ? Number(row[8]) : null,
+    notes: row[9] || null,
+    googleCalendarEventId: row[10] || null,
+    createdAt: Number(row[11]),
+    updatedAt: Number(row[12]),
+  }
+}
+
+function workshopToRow(w: Workshop): string[] {
+  return [
+    w.id,
+    w.title,
+    w.style,
+    String(w.startDate),
+    w.endDate != null ? String(w.endDate) : '',
+    w.location ?? '',
+    w.ticketPrice != null ? String(w.ticketPrice) : '',
+    w.baseCurrency ?? '',
+    w.maxCapacity != null ? String(w.maxCapacity) : '',
+    w.notes ?? '',
+    w.googleCalendarEventId ?? '',
+    String(w.createdAt),
+    String(w.updatedAt),
+  ]
+}
+
+export async function gsGetWorkshops(token: string, spreadsheetId: string): Promise<Workshop[]> {
+  const rows = await getRows(token, spreadsheetId, 'workshops')
+  return rows.filter(r => r[0]).map(rowToWorkshop).sort((a, b) => b.startDate - a.startDate)
+}
+
+export async function gsPutWorkshop(token: string, spreadsheetId: string, w: Workshop): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'workshops', 'M', workshopToRow(w), w.id)
+}
+
+export async function gsDeleteWorkshop(
+  token: string,
+  spreadsheetId: string,
+  sheetId: number,
+  id: string,
+): Promise<void> {
+  await deleteRow(token, spreadsheetId, sheetId, 'workshops', id)
+}
+
+// ── Inscription ───────────────────────────────────────────────────────────────
+
+function rowToInscription(row: string[]): Inscription {
+  return {
+    id: row[0],
+    teacherClassId: row[1] || null,
+    workshopId: row[2] || null,
+    studentName: row[3],
+    contactInfo: row[4] || null,
+    paymentStatus: (row[5] as Inscription['paymentStatus']) || 'unpaid',
+    amountPaid: row[6] ? Number(row[6]) : null,
+    baseCurrency: (row[7] as Currency) || null,
+    notes: row[8] || null,
+    enrolledAt: Number(row[9]),
+    updatedAt: Number(row[10]),
+  }
+}
+
+function inscriptionToRow(ins: Inscription): string[] {
+  return [
+    ins.id,
+    ins.teacherClassId ?? '',
+    ins.workshopId ?? '',
+    ins.studentName,
+    ins.contactInfo ?? '',
+    ins.paymentStatus,
+    ins.amountPaid != null ? String(ins.amountPaid) : '',
+    ins.baseCurrency ?? '',
+    ins.notes ?? '',
+    String(ins.enrolledAt),
+    String(ins.updatedAt),
+  ]
+}
+
+export async function gsGetInscriptions(token: string, spreadsheetId: string): Promise<Inscription[]> {
+  const rows = await getRows(token, spreadsheetId, 'inscriptions')
+  return rows.filter(r => r[0]).map(rowToInscription).sort((a, b) => b.enrolledAt - a.enrolledAt)
+}
+
+export async function gsPutInscription(token: string, spreadsheetId: string, ins: Inscription): Promise<void> {
+  await upsertRow(token, spreadsheetId, 'inscriptions', 'K', inscriptionToRow(ins), ins.id)
+}
+
+export async function gsDeleteInscription(
+  token: string,
+  spreadsheetId: string,
+  sheetId: number,
+  id: string,
+): Promise<void> {
+  await deleteRow(token, spreadsheetId, sheetId, 'inscriptions', id)
 }

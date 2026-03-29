@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import toast from 'react-hot-toast'
-import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord, DanceEvent } from '../types'
+import type { Package, AttendanceRecord, Currency, ExchangeRateCache, ScheduledClass, VideoRecord, DanceEvent, TeacherClass, Workshop, Inscription } from '../types'
 import {
   initSpreadsheet, getSheetIds,
   gsGetPackages, gsPutPackage, gsDeletePackage,
@@ -9,6 +9,9 @@ import {
   gsGetSettings, gsPutSetting,
   gsGetVideos, gsPutVideo, gsDeleteVideo,
   gsGetEvents, gsPutEvent, gsDeleteEvent,
+  gsGetTeacherClasses, gsPutTeacherClass, gsDeleteTeacherClass,
+  gsGetWorkshops, gsPutWorkshop, gsDeleteWorkshop,
+  gsGetInscriptions, gsPutInscription, gsDeleteInscription,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent, gcCreateAllDayEvent, gcUpdateAllDayEvent } from '../lib/googleCalendar'
 import { dbGetSetting, dbSetSetting } from '../db/idb'
@@ -23,6 +26,10 @@ interface AppState {
   scheduledClasses: ScheduledClass[]
   videos: VideoRecord[]
   events: DanceEvent[]
+  // Teacher mode data
+  teacherClasses: TeacherClass[]
+  workshops: Workshop[]
+  inscriptions: Inscription[]
   // Auth / Google
   googleToken: string | null
   spreadsheetId: string | null
@@ -31,6 +38,9 @@ interface AppState {
   schedSheetId: number
   videoSheetId: number
   eventsSheetId: number
+  teacherClassesSheetId: number
+  workshopsSheetId: number
+  inscriptionsSheetId: number
   // UI
   displayCurrency: Currency
   rates: ExchangeRateCache
@@ -47,9 +57,10 @@ interface AppState {
   isEventFormOpen: boolean
   editingEvent: DanceEvent | null
   // Tab navigation
-  activeTab: 'packages' | 'schedule' | 'settings' | 'analytics'
+  activeTab: 'packages' | 'schedule' | 'settings' | 'analytics' | 'teaching'
   // Settings
   autoCompleteClasses: boolean
+  teacherModeEnabled: boolean
   monthlyBudget: number | null
   isVideoUploading: boolean
   videoUploadProgress: number  // 0–100
@@ -61,11 +72,23 @@ interface AppState {
   prefilledInstructor: string | null
   // Search
   isSearchOpen: boolean
+  // Teacher mode UI
+  activeTeachingView: 'classes' | 'workshops' | 'inscriptions'
+  isTeacherClassFormOpen: boolean
+  editingTeacherClass: TeacherClass | null
+  isWorkshopFormOpen: boolean
+  editingWorkshop: Workshop | null
+  isInscriptionFormOpen: boolean
+  editingInscription: Inscription | null
+  inscriptionTargetId: string | null
+  inscriptionTargetType: 'class' | 'workshop' | null
+  activeTeacherClassId: string | null
+  activeWorkshopId: string | null
 
   // Actions
   signIn(token: string): Promise<void>
   setSignInError(msg: string | null): void
-  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number, eventsSheetId: number): Promise<void>
+  init(token: string, spreadsheetId: string, pkgSheetId: number, attSheetId: number, schedSheetId: number, videoSheetId: number, eventsSheetId: number, teacherClassesSheetId: number, workshopsSheetId: number, inscriptionsSheetId: number): Promise<void>
   addPackage(data: Omit<Package, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>): Promise<void>
   updatePackage(id: string, patch: Partial<Package>): Promise<void>
   archivePackage(id: string): Promise<void>
@@ -88,7 +111,7 @@ interface AppState {
   deleteScheduledClass(id: string): Promise<void>
   openClassForm(cls?: ScheduledClass): void
   closeClassForm(): void
-  setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics'): void
+  setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics' | 'teaching'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
   setMonthlyBudget(v: number | null): Promise<void>
   _runAutoComplete(): Promise<void>
@@ -104,6 +127,30 @@ interface AppState {
   deleteEvent(id: string): Promise<void>
   openEventForm(event?: DanceEvent): void
   closeEventForm(): void
+  // Teacher mode settings
+  setTeacherModeEnabled(value: boolean): Promise<void>
+  setActiveTeachingView(view: 'classes' | 'workshops' | 'inscriptions'): void
+  // TeacherClass actions
+  addTeacherClass(data: Omit<TeacherClass, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt'>, addToCalendar: boolean): Promise<void>
+  updateTeacherClass(id: string, patch: Partial<TeacherClass>, syncCalendar: boolean): Promise<void>
+  archiveTeacherClass(id: string): Promise<void>
+  deleteTeacherClass(id: string): Promise<void>
+  openTeacherClassForm(cls?: TeacherClass): void
+  closeTeacherClassForm(): void
+  setActiveTeacherClass(id: string | null): void
+  // Workshop actions
+  addWorkshop(data: Omit<Workshop, 'id' | 'createdAt' | 'updatedAt'>, addToCalendar: boolean): Promise<void>
+  updateWorkshop(id: string, patch: Partial<Workshop>, syncCalendar: boolean): Promise<void>
+  deleteWorkshop(id: string): Promise<void>
+  openWorkshopForm(w?: Workshop): void
+  closeWorkshopForm(): void
+  setActiveWorkshop(id: string | null): void
+  // Inscription actions
+  addInscription(data: Omit<Inscription, 'id' | 'enrolledAt' | 'updatedAt'>): Promise<void>
+  updateInscription(id: string, patch: Partial<Inscription>): Promise<void>
+  deleteInscription(id: string): Promise<void>
+  openInscriptionForm(targetId: string, targetType: 'class' | 'workshop', ins?: Inscription): void
+  closeInscriptionForm(): void
 }
 
 // Derived helpers (pure, no store)
@@ -162,6 +209,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   scheduledClasses: [],
   videos: [],
   events: [],
+  teacherClasses: [],
+  workshops: [],
+  inscriptions: [],
   googleToken: null,
   spreadsheetId: null,
   pkgSheetId: 0,
@@ -169,6 +219,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   schedSheetId: 2,
   videoSheetId: 4,
   eventsSheetId: 5,
+  teacherClassesSheetId: 6,
+  workshopsSheetId: 7,
+  inscriptionsSheetId: 8,
   displayCurrency: 'CAD',
   rates: FALLBACK_RATES,
   isLoading: false,
@@ -182,6 +235,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   editingEvent: null,
   activeTab: 'packages',
   autoCompleteClasses: false,
+  teacherModeEnabled: false,
   monthlyBudget: null,
   isVideoUploading: false,
   videoUploadProgress: 0,
@@ -190,6 +244,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   filterStyle: null,
   prefilledInstructor: null,
   isSearchOpen: false,
+  activeTeachingView: 'classes',
+  isTeacherClassFormOpen: false,
+  editingTeacherClass: null,
+  isWorkshopFormOpen: false,
+  editingWorkshop: null,
+  isInscriptionFormOpen: false,
+  editingInscription: null,
+  inscriptionTargetId: null,
+  inscriptionTargetType: null,
+  activeTeacherClassId: null,
+  activeWorkshopId: null,
 
   setSignInError(msg) {
     set({ signInError: msg })
@@ -199,11 +264,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isLoading: true, signInError: null })
     try {
       const spreadsheetId = await initSpreadsheet(token)
-      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId, events: eventsSheetId } = await getSheetIds(token, spreadsheetId)
+      const { packages: pkgSheetId, attendance: attSheetId, schedule: schedSheetId, videos: videoSheetId, events: eventsSheetId, teacherClasses: teacherClassesSheetId, workshops: workshopsSheetId, inscriptions: inscriptionsSheetId } = await getSheetIds(token, spreadsheetId)
       // Persist session — Google access tokens last ~1 hour
-      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
-      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId })
-      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId)
+      localStorage.setItem('gsession', JSON.stringify({ token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, teacherClassesSheetId, workshopsSheetId, inscriptionsSheetId, expiresAt: Date.now() + 55 * 60 * 1000 }))
+      set({ googleToken: token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, teacherClassesSheetId, workshopsSheetId, inscriptionsSheetId })
+      await get().init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, teacherClassesSheetId, workshopsSheetId, inscriptionsSheetId)
     } catch (err) {
       console.error('signIn failed:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -217,18 +282,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId) {
+  async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, teacherClassesSheetId, workshopsSheetId, inscriptionsSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, videos, events, cloudSettings, localCurrency, localAutoComplete, localMonthlyBudget, rates] = await Promise.all([
+    const [pkgs, att, schedule, videos, events, teacherClassesList, workshopsList, inscriptionsList, cloudSettings, localCurrency, localAutoComplete, localMonthlyBudget, localTeacherMode, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
       gsGetVideos(token, spreadsheetId),
       gsGetEvents(token, spreadsheetId),
+      gsGetTeacherClasses(token, spreadsheetId),
+      gsGetWorkshops(token, spreadsheetId),
+      gsGetInscriptions(token, spreadsheetId),
       gsGetSettings(token, spreadsheetId),
       dbGetSetting<Currency>('displayCurrency'),
       dbGetSetting<boolean>('autoCompleteClasses'),
       dbGetSetting<number | null>('monthlyBudget'),
+      dbGetSetting<boolean>('teacherModeEnabled'),
       loadRates(),
     ])
 
@@ -239,11 +308,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       ?? localAutoComplete ?? false
     const monthlyBudget = (cloudSettings['monthlyBudget'] as number | null | undefined)
       ?? localMonthlyBudget ?? null
+    const teacherModeEnabled = (cloudSettings['teacherModeEnabled'] as boolean | undefined)
+      ?? localTeacherMode ?? false
     // Sync cloud values back into IDB so next cold-start is up-to-date
     await Promise.all([
       dbSetSetting('displayCurrency', currency),
       dbSetSetting('autoCompleteClasses', autoComplete),
       dbSetSetting('monthlyBudget', monthlyBudget),
+      dbSetSetting('teacherModeEnabled', teacherModeEnabled),
     ])
 
     set({
@@ -252,14 +324,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       scheduledClasses: schedule,
       videos,
       events,
+      teacherClasses: teacherClassesList,
+      workshops: workshopsList,
+      inscriptions: inscriptionsList,
       pkgSheetId,
       attSheetId,
       schedSheetId,
       videoSheetId,
       eventsSheetId: eventsSheetId ?? 5,
+      teacherClassesSheetId: teacherClassesSheetId ?? 6,
+      workshopsSheetId: workshopsSheetId ?? 7,
+      inscriptionsSheetId: inscriptionsSheetId ?? 8,
       displayCurrency: currency,
       rates,
       autoCompleteClasses: autoComplete,
+      teacherModeEnabled,
       monthlyBudget,
       isLoading: false,
     })
@@ -468,7 +547,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ isClassFormOpen: false, editingClass: null })
   },
 
-  setActiveTab(tab) {
+  setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics' | 'teaching') {
     set({ activeTab: tab })
   },
 
@@ -766,5 +845,246 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   closeEventForm() {
     set({ isEventFormOpen: false, editingEvent: null })
+  },
+
+  // ── Teacher mode settings ────────────────────────────────────────────────────
+
+  async setTeacherModeEnabled(value) {
+    set({ teacherModeEnabled: value })
+    await dbSetSetting('teacherModeEnabled', value)
+    const { googleToken: token, spreadsheetId } = get()
+    if (token && spreadsheetId) {
+      gsPutSetting(token, spreadsheetId, 'teacherModeEnabled', value).catch(err =>
+        console.warn('Failed to sync teacherModeEnabled to Sheets:', err)
+      )
+    }
+  },
+
+  setActiveTeachingView(view) {
+    set({ activeTeachingView: view })
+  },
+
+  // ── TeacherClass actions ─────────────────────────────────────────────────────
+
+  async addTeacherClass(data, addToCalendar) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+
+    let googleCalendarEventId: string | null = null
+    if (addToCalendar) {
+      try {
+        googleCalendarEventId = await gcCreateEvent(token, {
+          title: data.title,
+          packageId: null,
+          startTime: data.startTime,
+          endTime: data.endTime,
+          location: data.location,
+          notes: data.notes,
+          recurrence: data.recurrence,
+        })
+        toast.success('Added to Google Calendar')
+      } catch (err) {
+        console.warn('Google Calendar sync failed:', err)
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
+      }
+    }
+
+    const tc: TeacherClass = {
+      ...data,
+      id: crypto.randomUUID(),
+      googleCalendarEventId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      archivedAt: null,
+    }
+    await gsPutTeacherClass(token, spreadsheetId, tc)
+    set(s => ({ teacherClasses: [tc, ...s.teacherClasses] }))
+  },
+
+  async updateTeacherClass(id, patch, syncCalendar) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const tc = get().teacherClasses.find(c => c.id === id)
+    if (!tc) return
+    const updated: TeacherClass = { ...tc, ...patch, updatedAt: Date.now() }
+
+    if (syncCalendar && token) {
+      try {
+        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence }
+        if (updated.googleCalendarEventId) {
+          await gcUpdateEvent(token, updated.googleCalendarEventId, calData)
+        } else {
+          updated.googleCalendarEventId = await gcCreateEvent(token, calData)
+        }
+      } catch (err) {
+        console.warn('Google Calendar sync failed:', err)
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
+      }
+    }
+
+    await gsPutTeacherClass(token, spreadsheetId, updated)
+    set(s => ({ teacherClasses: s.teacherClasses.map(c => c.id === id ? updated : c) }))
+  },
+
+  async archiveTeacherClass(id) {
+    await get().updateTeacherClass(id, { archivedAt: Date.now() }, false)
+  },
+
+  async deleteTeacherClass(id) {
+    const { googleToken: token, spreadsheetId, teacherClassesSheetId } = get()
+    if (!token || !spreadsheetId) return
+    const tc = get().teacherClasses.find(c => c.id === id)
+    if (tc?.googleCalendarEventId && token) {
+      try { await gcDeleteEvent(token, tc.googleCalendarEventId) } catch { /* ignore */ }
+    }
+    await gsDeleteTeacherClass(token, spreadsheetId, teacherClassesSheetId, id)
+    set(s => ({
+      teacherClasses: s.teacherClasses.filter(c => c.id !== id),
+      inscriptions: s.inscriptions.filter(ins => ins.teacherClassId !== id),
+      activeTeacherClassId: s.activeTeacherClassId === id ? null : s.activeTeacherClassId,
+    }))
+  },
+
+  openTeacherClassForm(cls) {
+    set({ isTeacherClassFormOpen: true, editingTeacherClass: cls ?? null })
+  },
+
+  closeTeacherClassForm() {
+    set({ isTeacherClassFormOpen: false, editingTeacherClass: null })
+  },
+
+  setActiveTeacherClass(id) {
+    set({ activeTeacherClassId: id })
+  },
+
+  // ── Workshop actions ─────────────────────────────────────────────────────────
+
+  async addWorkshop(data, addToCalendar) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+
+    let googleCalendarEventId: string | null = null
+    if (addToCalendar) {
+      try {
+        googleCalendarEventId = await gcCreateAllDayEvent(token, {
+          name: data.title,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          location: data.location,
+          notes: data.notes,
+        })
+        toast.success('Added to Google Calendar')
+      } catch (err) {
+        console.warn('Google Calendar sync failed:', err)
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
+      }
+    }
+
+    const w: Workshop = {
+      ...data,
+      id: crypto.randomUUID(),
+      googleCalendarEventId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    await gsPutWorkshop(token, spreadsheetId, w)
+    set(s => ({ workshops: [w, ...s.workshops] }))
+  },
+
+  async updateWorkshop(id, patch, syncCalendar) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const w = get().workshops.find(wk => wk.id === id)
+    if (!w) return
+    const updated: Workshop = { ...w, ...patch, updatedAt: Date.now() }
+
+    if (syncCalendar && token) {
+      try {
+        const calData = { name: updated.title, startDate: updated.startDate, endDate: updated.endDate, location: updated.location, notes: updated.notes }
+        if (updated.googleCalendarEventId) {
+          await gcUpdateAllDayEvent(token, updated.googleCalendarEventId, calData)
+        } else {
+          updated.googleCalendarEventId = await gcCreateAllDayEvent(token, calData)
+        }
+      } catch (err) {
+        console.warn('Google Calendar sync failed:', err)
+        toast.error(`Calendar: ${err instanceof Error ? err.message.slice(0, 120) : String(err)}`, { duration: 8000 })
+      }
+    }
+
+    await gsPutWorkshop(token, spreadsheetId, updated)
+    set(s => ({ workshops: s.workshops.map(wk => wk.id === id ? updated : wk) }))
+  },
+
+  async deleteWorkshop(id) {
+    const { googleToken: token, spreadsheetId, workshopsSheetId } = get()
+    if (!token || !spreadsheetId) return
+    const w = get().workshops.find(wk => wk.id === id)
+    if (w?.googleCalendarEventId && token) {
+      try { await gcDeleteEvent(token, w.googleCalendarEventId) } catch { /* ignore */ }
+    }
+    await gsDeleteWorkshop(token, spreadsheetId, workshopsSheetId, id)
+    set(s => ({
+      workshops: s.workshops.filter(wk => wk.id !== id),
+      inscriptions: s.inscriptions.filter(ins => ins.workshopId !== id),
+      activeWorkshopId: s.activeWorkshopId === id ? null : s.activeWorkshopId,
+    }))
+  },
+
+  openWorkshopForm(w) {
+    set({ isWorkshopFormOpen: true, editingWorkshop: w ?? null })
+  },
+
+  closeWorkshopForm() {
+    set({ isWorkshopFormOpen: false, editingWorkshop: null })
+  },
+
+  setActiveWorkshop(id) {
+    set({ activeWorkshopId: id })
+  },
+
+  // ── Inscription actions ──────────────────────────────────────────────────────
+
+  async addInscription(data) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const ins: Inscription = {
+      ...data,
+      id: crypto.randomUUID(),
+      enrolledAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    await gsPutInscription(token, spreadsheetId, ins)
+    set(s => ({ inscriptions: [ins, ...s.inscriptions] }))
+  },
+
+  async updateInscription(id, patch) {
+    const { googleToken: token, spreadsheetId } = get()
+    if (!token || !spreadsheetId) return
+    const ins = get().inscriptions.find(i => i.id === id)
+    if (!ins) return
+    const updated: Inscription = { ...ins, ...patch, updatedAt: Date.now() }
+    await gsPutInscription(token, spreadsheetId, updated)
+    set(s => ({ inscriptions: s.inscriptions.map(i => i.id === id ? updated : i) }))
+  },
+
+  async deleteInscription(id) {
+    const { googleToken: token, spreadsheetId, inscriptionsSheetId } = get()
+    if (!token || !spreadsheetId) return
+    await gsDeleteInscription(token, spreadsheetId, inscriptionsSheetId, id)
+    set(s => ({ inscriptions: s.inscriptions.filter(i => i.id !== id) }))
+  },
+
+  openInscriptionForm(targetId, targetType, ins) {
+    set({
+      isInscriptionFormOpen: true,
+      inscriptionTargetId: targetId,
+      inscriptionTargetType: targetType,
+      editingInscription: ins ?? null,
+    })
+  },
+
+  closeInscriptionForm() {
+    set({ isInscriptionFormOpen: false, editingInscription: null, inscriptionTargetId: null, inscriptionTargetType: null })
   },
 }))
