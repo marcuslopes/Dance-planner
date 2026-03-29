@@ -113,3 +113,52 @@ export async function gcUpdateEvent(
 export async function gcDeleteEvent(token: string, eventId: string): Promise<void> {
   await gcFetch(`${CALENDAR_BASE}/${eventId}`, token, { method: 'DELETE' })
 }
+
+// ── All-day event helpers (for DanceEvents) ───────────────────────────────────
+
+function toDateStr(epochMs: number): string {
+  return new Date(epochMs).toISOString().slice(0, 10)
+}
+
+interface GCalAllDayBody {
+  summary: string
+  location?: string
+  description?: string
+  start: { date: string }
+  end: { date: string }
+}
+
+function buildAllDayBody(event: { name: string; startDate: number; endDate: number | null; location: string | null; notes: string | null }): GCalAllDayBody {
+  const start = toDateStr(event.startDate)
+  // Google Calendar end date is exclusive — add 1 day
+  const endMs = event.endDate ?? event.startDate
+  const end = toDateStr(endMs + 24 * 60 * 60 * 1000)
+  const body: GCalAllDayBody = { summary: event.name, start: { date: start }, end: { date: end } }
+  if (event.location) body.location = event.location
+  if (event.notes) body.description = event.notes
+  return body
+}
+
+/** Creates an all-day Google Calendar event for a DanceEvent. Returns the calendar event ID. */
+export async function gcCreateAllDayEvent(
+  token: string,
+  event: { name: string; startDate: number; endDate: number | null; location: string | null; notes: string | null }
+): Promise<string> {
+  const result = await gcFetch(CALENDAR_BASE, token, {
+    method: 'POST',
+    body: JSON.stringify(buildAllDayBody(event)),
+  })
+  return result.id as string
+}
+
+/** Updates an existing all-day Google Calendar event. */
+export async function gcUpdateAllDayEvent(
+  token: string,
+  calEventId: string,
+  event: { name: string; startDate: number; endDate: number | null; location: string | null; notes: string | null }
+): Promise<void> {
+  await gcFetch(`${CALENDAR_BASE}/${calEventId}`, token, {
+    method: 'PUT',
+    body: JSON.stringify(buildAllDayBody(event)),
+  })
+}

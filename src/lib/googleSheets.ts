@@ -81,8 +81,8 @@ export async function initSpreadsheet(token: string): Promise<string> {
           values: [['id', 'package_id', 'drive_file_id', 'drive_web_view_link', 'attended_at', 'uploaded_at', 'filename', 'size_bytes', 'title', 'notes']],
         },
         {
-          range: 'events!A1:K1',
-          values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'created_at', 'updated_at']],
+          range: 'events!A1:L1',
+          values: [['id', 'name', 'start_date', 'end_date', 'location', 'cost', 'base_currency', 'styles_json', 'notes', 'google_calendar_event_id', 'created_at', 'updated_at']],
         },
       ],
     }),
@@ -424,8 +424,9 @@ function rowToEvent(row: string[]): DanceEvent {
     baseCurrency: (row[6] as Currency) || null,
     styles: row[7] ? JSON.parse(row[7]) : [],
     notes: row[8] || null,
-    createdAt: Number(row[9]),
-    updatedAt: Number(row[10]),
+    googleCalendarEventId: row[9] || null,
+    createdAt: Number(row[10]),
+    updatedAt: Number(row[11]),
   }
 }
 
@@ -440,6 +441,7 @@ function eventToRow(e: DanceEvent): string[] {
     e.baseCurrency ?? '',
     JSON.stringify(e.styles),
     e.notes ?? '',
+    e.googleCalendarEventId ?? '',
     String(e.createdAt),
     String(e.updatedAt),
   ]
@@ -451,7 +453,7 @@ export async function gsGetEvents(token: string, spreadsheetId: string): Promise
 }
 
 export async function gsPutEvent(token: string, spreadsheetId: string, event: DanceEvent): Promise<void> {
-  await upsertRow(token, spreadsheetId, 'events', 'K', eventToRow(event), event.id)
+  await upsertRow(token, spreadsheetId, 'events', 'L', eventToRow(event), event.id)
 }
 
 export async function gsDeleteEvent(

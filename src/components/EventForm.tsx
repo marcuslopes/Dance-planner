@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import { DANCE_STYLES } from '../types'
 import type { Currency } from '../types'
-import { X } from 'lucide-react'
+import { X, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 
 const CURRENCIES: Currency[] = ['CAD', 'USD', 'BRL']
@@ -33,6 +33,7 @@ export function EventForm() {
   const [styles, setStyles] = useState<string[]>([])
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [addToCalendar, setAddToCalendar] = useState(false)
 
   useEffect(() => {
     if (isEventFormOpen) {
@@ -45,6 +46,7 @@ export function EventForm() {
         setCurrency(editingEvent.baseCurrency ?? 'CAD')
         setStyles(editingEvent.styles)
         setNotes(editingEvent.notes ?? '')
+        setAddToCalendar(!!editingEvent.googleCalendarEventId)
       } else {
         setName('')
         setStartDate(toDateInput(Date.now()))
@@ -54,6 +56,7 @@ export function EventForm() {
         setCurrency('CAD')
         setStyles([])
         setNotes('')
+        setAddToCalendar(false)
       }
     }
   }, [isEventFormOpen, editingEvent])
@@ -79,9 +82,9 @@ export function EventForm() {
         notes: notes.trim() || null,
       }
       if (editingEvent) {
-        await updateEvent(editingEvent.id, data)
+        await updateEvent(editingEvent.id, data, addToCalendar)
       } else {
-        await addEvent(data)
+        await addEvent(data, addToCalendar)
       }
       closeEventForm()
     } finally {
@@ -112,7 +115,7 @@ export function EventForm() {
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
             maxHeight: '92dvh',
             display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
@@ -248,6 +251,37 @@ export function EventForm() {
                 placeholder="Any additional details…"
                 style={{ ...inputStyle, resize: 'none', lineHeight: 1.5 }}
               />
+            </div>
+
+            {/* Google Calendar toggle */}
+            <div
+              onClick={() => setAddToCalendar(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 14px', borderRadius: 12, marginBottom: 16, cursor: 'pointer',
+                background: addToCalendar ? 'rgba(124,58,237,0.12)' : 'var(--bg-card)',
+                border: `1px solid ${addToCalendar ? '#7c3aed' : 'var(--border)'}`,
+                transition: 'all 150ms ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Calendar size={16} style={{ color: addToCalendar ? '#7c3aed' : 'var(--text-muted)' }} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Add to Google Calendar</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Creates an all-day event</div>
+                </div>
+              </div>
+              <div style={{
+                width: 40, height: 22, borderRadius: 11,
+                background: addToCalendar ? '#7c3aed' : 'var(--border)',
+                position: 'relative', transition: 'background 150ms ease', flexShrink: 0,
+              }}>
+                <div style={{
+                  position: 'absolute', top: 3, left: addToCalendar ? 21 : 3,
+                  width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                  transition: 'left 150ms ease',
+                }} />
+              </div>
             </div>
 
             {/* Buttons */}
