@@ -73,7 +73,7 @@ interface AppState {
   markAttended(packageId: string): Promise<AttendanceRecord>
   undoLastAttendance(packageId: string): Promise<void>
   deleteAttendance(id: string): Promise<void>
-  updateAttendance(id: string, patch: Pick<AttendanceRecord, 'rating' | 'learnedNote' | 'practiceNote'>): Promise<void>
+  updateAttendance(id: string, patch: Pick<AttendanceRecord, 'rating' | 'learnedNote' | 'practiceNote' | 'title'>): Promise<void>
   setDisplayCurrency(c: Currency): Promise<void>
   refreshRates(): Promise<void>
   openForm(pkg?: Package): void
@@ -318,6 +318,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       rating: null,
       learnedNote: null,
       practiceNote: null,
+      title: null,
     }
     await gsPutAttendance(token, spreadsheetId, record)
     set(s => ({ attendance: [record, ...s.attendance] }))
@@ -506,6 +507,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           rating: null,
           learnedNote: null,
           practiceNote: null,
+          title: null,
         }
         try {
           await gsPutAttendance(token, spreadsheetId, record)

@@ -15,6 +15,7 @@ export function ClassJournalSheet({ record, pkg, onClose }: Props) {
   const classIndex = pkgAttendance.findIndex(a => a.id === record.id)
   const classNumber = pkgAttendance.length - classIndex
 
+  const [title, setTitle] = useState(record.title ?? '')
   const [rating, setRating] = useState<number | null>(record.rating)
   const [learnedNote, setLearnedNote] = useState(record.learnedNote ?? '')
   const [practiceNote, setPracticeNote] = useState(record.practiceNote ?? '')
@@ -24,6 +25,7 @@ export function ClassJournalSheet({ record, pkg, onClose }: Props) {
     setSaving(true)
     try {
       await updateAttendance(record.id, {
+        title: title.trim() || null,
         rating,
         learnedNote: learnedNote.trim() || null,
         practiceNote: practiceNote.trim() || null,
@@ -79,6 +81,25 @@ export function ClassJournalSheet({ record, pkg, onClose }: Props) {
           </div>
 
           <div className="scroll-area" style={{ flex: 1, padding: '0 24px 16px', overflowY: 'auto' }}>
+            {/* Class title */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Class title <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="e.g. Footwork Workshop"
+                style={{
+                  width: '100%', padding: '10px 12px', boxSizing: 'border-box',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  borderRadius: 10, color: 'var(--text-primary)', fontSize: 14,
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+            </div>
+
             {/* Star rating */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
