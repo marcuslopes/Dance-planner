@@ -80,6 +80,7 @@ export function EventForm() {
         baseCurrency: cost ? currency : null,
         styles,
         notes: notes.trim() || null,
+        googleCalendarEventId: editingEvent?.googleCalendarEventId ?? null,
       }
       if (editingEvent) {
         await updateEvent(editingEvent.id, data, addToCalendar)
