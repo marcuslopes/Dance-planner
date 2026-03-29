@@ -112,7 +112,7 @@ export function EventForm() {
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
             maxHeight: '92dvh',
             display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
