@@ -340,8 +340,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async setDisplayCurrency(c) {
-    await dbSetSetting('displayCurrency', c)
     set({ displayCurrency: c })
+    await dbSetSetting('displayCurrency', c)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'displayCurrency', c).catch(err =>
@@ -473,8 +473,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async setAutoCompleteClasses(value) {
-    await dbSetSetting('autoCompleteClasses', value)
     set({ autoCompleteClasses: value })
+    await dbSetSetting('autoCompleteClasses', value)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'autoCompleteClasses', value).catch(err =>
@@ -687,8 +687,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async setMonthlyBudget(v) {
-    await dbSetSetting('monthlyBudget', v)
     set({ monthlyBudget: v })
+    await dbSetSetting('monthlyBudget', v)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'monthlyBudget', v).catch(err =>
