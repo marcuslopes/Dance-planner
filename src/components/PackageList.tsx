@@ -70,7 +70,7 @@ export function PackageList() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '0 20px 12px',
         }}>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 22 }}>💃</span>
               <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>Passinho</span>
