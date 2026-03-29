@@ -41,7 +41,7 @@ interface AppState {
   isClassFormOpen: boolean
   editingClass: ScheduledClass | null
   // Tab navigation
-  activeTab: 'packages' | 'schedule' | 'settings'
+  activeTab: 'packages' | 'schedule' | 'settings' | 'analytics'
   // Settings
   autoCompleteClasses: boolean
   isVideoUploading: boolean
@@ -78,7 +78,7 @@ interface AppState {
   deleteScheduledClass(id: string): Promise<void>
   openClassForm(cls?: ScheduledClass): void
   closeClassForm(): void
-  setActiveTab(tab: 'packages' | 'schedule' | 'settings'): void
+  setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics'): void
   setAutoCompleteClasses(value: boolean): Promise<void>
   _runAutoComplete(): Promise<void>
   uploadClassVideo(packageId: string, file: File, attendedAt: number, title?: string, notes?: string): Promise<void>
