@@ -57,7 +57,7 @@ export function ClassJournalSheet({ record, pkg, onClose }: Props) {
             width: '100%', maxWidth: 430,
             background: 'var(--bg-elevated)',
             borderRadius: '24px 24px 0 0',
-            paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))',
+            paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 0px))',
             maxHeight: '80dvh',
             display: 'flex', flexDirection: 'column',
             pointerEvents: 'auto',
