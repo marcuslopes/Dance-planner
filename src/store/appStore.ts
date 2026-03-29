@@ -706,8 +706,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (addToCalendar) {
       try {
         googleCalendarEventId = await gcCreateAllDayEvent(token, data)
+        toast.success('Added to Google Calendar')
       } catch (err) {
         console.warn('Calendar sync failed:', err)
+        toast.error('Could not add to Google Calendar')
       }
     }
     const event: DanceEvent = {
@@ -731,11 +733,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         if (updated.googleCalendarEventId) {
           await gcUpdateAllDayEvent(token, updated.googleCalendarEventId, updated)
+          toast.success('Google Calendar updated')
         } else {
           updated.googleCalendarEventId = await gcCreateAllDayEvent(token, updated)
+          toast.success('Added to Google Calendar')
         }
       } catch (err) {
         console.warn('Calendar sync failed:', err)
+        toast.error('Could not sync to Google Calendar')
       }
     }
     await gsPutEvent(token, spreadsheetId, updated)

@@ -414,6 +414,9 @@ export async function gsDeleteVideo(
 // ── Events ────────────────────────────────────────────────────────────────────
 
 function rowToEvent(row: string[]): DanceEvent {
+  // Old format (11 cols): no google_calendar_event_id column.
+  // Detect by checking if row[9] looks like an epoch ms timestamp (13-digit number).
+  const isOldFormat = !!row[9] && Number(row[9]) > 1_000_000_000_000
   return {
     id: row[0],
     name: row[1],
@@ -424,9 +427,9 @@ function rowToEvent(row: string[]): DanceEvent {
     baseCurrency: (row[6] as Currency) || null,
     styles: row[7] ? JSON.parse(row[7]) : [],
     notes: row[8] || null,
-    googleCalendarEventId: row[9] || null,
-    createdAt: Number(row[10]),
-    updatedAt: Number(row[11]),
+    googleCalendarEventId: isOldFormat ? null : (row[9] || null),
+    createdAt: isOldFormat ? Number(row[9]) : Number(row[10]),
+    updatedAt: isOldFormat ? Number(row[10]) : Number(row[11]),
   }
 }
 
