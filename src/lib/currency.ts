@@ -1,5 +1,4 @@
 import type { Currency, ExchangeRateCache } from '../types'
-import { dbGetRateCache, dbSetRateCache } from '../db/idb'
 
 // Fallback rates (updated at build time — CAD as base)
 export const FALLBACK_RATES: ExchangeRateCache = {
@@ -11,9 +10,17 @@ export const FALLBACK_RATES: ExchangeRateCache = {
 
 const RATE_TTL_MS = 6 * 60 * 60 * 1000 // 6 hours
 
+function lsGetRateCache(): ExchangeRateCache | undefined {
+  try { return JSON.parse(localStorage.getItem('er-cache') ?? '') } catch { return undefined }
+}
+
+function lsSetRateCache(cache: ExchangeRateCache): void {
+  try { localStorage.setItem('er-cache', JSON.stringify(cache)) } catch { /* ignore quota errors */ }
+}
+
 export async function loadRates(): Promise<ExchangeRateCache> {
   // 1. Try cached
-  const cached = await dbGetRateCache()
+  const cached = lsGetRateCache()
   if (cached && Date.now() - cached.fetchedAt < RATE_TTL_MS) {
     return cached
   }
@@ -29,7 +36,7 @@ export async function loadRates(): Promise<ExchangeRateCache> {
         fetchedAt: Date.now(),
         isFallback: false,
       }
-      await dbSetRateCache(fresh)
+      lsSetRateCache(fresh)
       return fresh
     }
   } catch {
