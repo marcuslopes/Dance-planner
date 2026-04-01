@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { format, startOfDay } from 'date-fns'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAppStore, classesUsed } from '../store/appStore'
 import { expandOccurrences } from '../lib/recurrence'
@@ -619,10 +619,10 @@ export function ClassForm() {
                     disabled={!cancelDate || cancelling}
                     onClick={async () => {
                       if (!cancelDate) return
-                      const occTs = startOfDay(new Date(cancelDate)).getTime()
                       // Verify this date is an actual occurrence of the class
+                      // Compare by date string to avoid UTC vs local timezone issues
                       const validOccs = expandOccurrences(editingClass, Date.now() + 365 * 24 * 60 * 60 * 1000)
-                      const match = validOccs.find(t => startOfDay(new Date(t)).getTime() === occTs)
+                      const match = validOccs.find(t => format(new Date(t), 'yyyy-MM-dd') === cancelDate)
                       if (!match) {
                         toast.error('That date is not a scheduled occurrence of this class')
                         return
