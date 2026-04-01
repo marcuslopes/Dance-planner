@@ -883,6 +883,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           location: data.location,
           notes: data.notes,
           recurrence: data.recurrence,
+          cancelledOccurrences: [],
         })
         toast.success('Added to Google Calendar')
       } catch (err) {
@@ -912,7 +913,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (syncCalendar && token) {
       try {
-        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence }
+        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence, cancelledOccurrences: [] as number[] }
         if (updated.googleCalendarEventId) {
           await gcUpdateEvent(token, updated.googleCalendarEventId, calData)
         } else {
