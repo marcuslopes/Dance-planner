@@ -148,6 +148,7 @@ export interface ScheduledClass {
   recurrence: RecurrenceRule | null
   googleCalendarEventId: string | null
   notes: string | null
+  cancelledOccurrences: number[]    // epoch ms timestamps of occurrences that didn't take place
   createdAt: number
   updatedAt: number
 }
