@@ -14,7 +14,6 @@ import {
   gsGetInscriptions, gsPutInscription, gsDeleteInscription,
 } from '../lib/googleSheets'
 import { gcCreateEvent, gcUpdateEvent, gcDeleteEvent, gcCreateAllDayEvent, gcUpdateAllDayEvent } from '../lib/googleCalendar'
-import { dbGetSetting, dbSetSetting } from '../db/idb'
 import { expandOccurrences } from '../lib/recurrence'
 import { loadRates, FALLBACK_RATES } from '../lib/currency'
 import { compressVideo, preloadFFmpeg, VIDEO_SIZE_LIMIT_MB } from '../lib/videoCompression'
@@ -284,7 +283,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async init(token, spreadsheetId, pkgSheetId, attSheetId, schedSheetId, videoSheetId, eventsSheetId, teacherClassesSheetId, workshopsSheetId, inscriptionsSheetId) {
     set({ isLoading: true })
-    const [pkgs, att, schedule, videos, events, teacherClassesList, workshopsList, inscriptionsList, cloudSettings, localCurrency, localAutoComplete, localMonthlyBudget, localTeacherMode, rates] = await Promise.all([
+    const [pkgs, att, schedule, videos, events, teacherClassesList, workshopsList, inscriptionsList, cloudSettings, rates] = await Promise.all([
       gsGetPackages(token, spreadsheetId),
       gsGetAttendance(token, spreadsheetId),
       gsGetSchedule(token, spreadsheetId),
@@ -294,29 +293,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       gsGetWorkshops(token, spreadsheetId),
       gsGetInscriptions(token, spreadsheetId),
       gsGetSettings(token, spreadsheetId),
-      dbGetSetting<Currency>('displayCurrency'),
-      dbGetSetting<boolean>('autoCompleteClasses'),
-      dbGetSetting<number | null>('monthlyBudget'),
-      dbGetSetting<boolean>('teacherModeEnabled'),
       loadRates(),
     ])
 
-    // Cloud settings win over local IDB; fall back to local then defaults
-    const currency = (cloudSettings['displayCurrency'] as Currency | undefined)
-      ?? localCurrency ?? 'CAD'
-    const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined)
-      ?? localAutoComplete ?? false
-    const monthlyBudget = (cloudSettings['monthlyBudget'] as number | null | undefined)
-      ?? localMonthlyBudget ?? null
-    const teacherModeEnabled = (cloudSettings['teacherModeEnabled'] as boolean | undefined)
-      ?? localTeacherMode ?? false
-    // Sync cloud values back into IDB so next cold-start is up-to-date
-    await Promise.all([
-      dbSetSetting('displayCurrency', currency),
-      dbSetSetting('autoCompleteClasses', autoComplete),
-      dbSetSetting('monthlyBudget', monthlyBudget),
-      dbSetSetting('teacherModeEnabled', teacherModeEnabled),
-    ])
+    const currency = (cloudSettings['displayCurrency'] as Currency | undefined) ?? 'CAD'
+    const autoComplete = (cloudSettings['autoCompleteClasses'] as boolean | undefined) ?? false
+    const monthlyBudget = (cloudSettings['monthlyBudget'] as number | null | undefined) ?? null
+    const teacherModeEnabled = (cloudSettings['teacherModeEnabled'] as boolean | undefined) ?? false
 
     set({
       packages: pkgs,
@@ -420,7 +403,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async setDisplayCurrency(c) {
     set({ displayCurrency: c })
-    await dbSetSetting('displayCurrency', c)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'displayCurrency', c).catch(err =>
@@ -553,7 +535,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async setAutoCompleteClasses(value) {
     set({ autoCompleteClasses: value })
-    await dbSetSetting('autoCompleteClasses', value)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'autoCompleteClasses', value).catch(err =>
@@ -767,7 +748,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async setMonthlyBudget(v) {
     set({ monthlyBudget: v })
-    await dbSetSetting('monthlyBudget', v)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'monthlyBudget', v).catch(err =>
@@ -851,7 +831,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async setTeacherModeEnabled(value) {
     set({ teacherModeEnabled: value })
-    await dbSetSetting('teacherModeEnabled', value)
     const { googleToken: token, spreadsheetId } = get()
     if (token && spreadsheetId) {
       gsPutSetting(token, spreadsheetId, 'teacherModeEnabled', value).catch(err =>
