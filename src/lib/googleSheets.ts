@@ -10,7 +10,7 @@ function auth(token: string) {
   return { Authorization: `Bearer ${token}` }
 }
 
-async function gFetch(url: string, token: string, init: RequestInit = {}) {
+async function gFetch(url: string, token: string, init: RequestInit = {}, retries = 3) {
   const res = await fetch(url, {
     ...init,
     headers: {
@@ -19,6 +19,10 @@ async function gFetch(url: string, token: string, init: RequestInit = {}) {
       ...(init.headers ?? {}),
     },
   })
+  if (res.status === 429 && retries > 0) {
+    await new Promise(r => setTimeout(r, (4 - retries) * 2000)) // 2s, 4s, 6s
+    return gFetch(url, token, init, retries - 1)
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`Google API ${res.status}: ${text}`)
