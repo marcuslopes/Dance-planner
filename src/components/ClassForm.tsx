@@ -525,52 +525,55 @@ export function ClassForm() {
             <span style={labelStyle}>Cancelled occurrences</span>
 
             {/* Non-recurring: single toggle */}
-            {!editingClass.recurrence ? (
-              <button
-                type="button"
-                disabled={cancelling}
-                onClick={async () => {
-                  setCancelling(true)
-                  try {
-                    if (editingClass.cancelledOccurrences.includes(editingClass.startTime)) {
-                      await uncancelClassOccurrence(editingClass.id, editingClass.startTime)
-                      toast.success('Class restored')
-                    } else {
-                      await cancelClassOccurrence(editingClass.id, editingClass.startTime)
-                      toast.success('Class marked as cancelled')
+            {!editingClass.recurrence ? (() => {
+              const isCancelled = (editingClass.cancelledOccurrences ?? []).includes(editingClass.startTime)
+              return (
+                <button
+                  type="button"
+                  disabled={cancelling}
+                  onClick={async () => {
+                    setCancelling(true)
+                    try {
+                      if (isCancelled) {
+                        await uncancelClassOccurrence(editingClass.id, editingClass.startTime)
+                        toast.success('Class restored')
+                      } else {
+                        await cancelClassOccurrence(editingClass.id, editingClass.startTime)
+                        toast.success('Class marked as cancelled')
+                      }
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message.slice(0, 120) : 'Failed to update')
+                    } finally {
+                      setCancelling(false)
                     }
-                  } catch {
-                    toast.error('Failed to update')
-                  } finally {
-                    setCancelling(false)
-                  }
-                }}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '12px 14px', borderRadius: 12,
-                  border: `1.5px solid ${editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--border)'}`,
-                  background: editingClass.cancelledOccurrences.includes(editingClass.startTime) ? 'rgba(244,63,94,0.08)' : 'var(--bg-elevated)',
-                  cursor: cancelling ? 'not-allowed' : 'pointer',
-                  opacity: cancelling ? 0.7 : 1,
-                }}
-              >
-                <span style={{ fontSize: 14, fontWeight: 600, color: editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--text-muted)' }}>
-                  {editingClass.cancelledOccurrences.includes(editingClass.startTime) ? 'This class was cancelled — tap to restore' : 'Mark this class as cancelled'}
-                </span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--text-muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {editingClass.cancelledOccurrences.includes(editingClass.startTime)
-                    ? <><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="m9 12 2 2 4-4"/></>
-                    : <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
-                  }
-                </svg>
-              </button>
-            ) : (
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 14px', borderRadius: 12,
+                    border: `1.5px solid ${isCancelled ? '#f43f5e' : 'var(--border)'}`,
+                    background: isCancelled ? 'rgba(244,63,94,0.08)' : 'var(--bg-elevated)',
+                    cursor: cancelling ? 'not-allowed' : 'pointer',
+                    opacity: cancelling ? 0.7 : 1,
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 600, color: isCancelled ? '#f43f5e' : 'var(--text-muted)' }}>
+                    {isCancelled ? 'This class was cancelled — tap to restore' : 'Mark this class as cancelled'}
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isCancelled ? '#f43f5e' : 'var(--text-muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    {isCancelled
+                      ? <><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="m9 12 2 2 4-4"/></>
+                      : <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
+                    }
+                  </svg>
+                </button>
+              )
+            })() : (
               /* Recurring: date picker + list */
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {/* List of cancelled dates */}
-                {editingClass.cancelledOccurrences.length > 0 && (
+                {(editingClass.cancelledOccurrences ?? []).length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {[...editingClass.cancelledOccurrences].sort().map(ts => (
+                    {[...(editingClass.cancelledOccurrences ?? [])].sort().map(ts => (
                       <div key={ts} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '9px 12px', borderRadius: 10,
@@ -587,8 +590,8 @@ export function ClassForm() {
                             try {
                               await uncancelClassOccurrence(editingClass.id, ts)
                               toast.success('Occurrence restored')
-                            } catch {
-                              toast.error('Failed to restore')
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message.slice(0, 120) : 'Failed to restore')
                             } finally {
                               setCancelling(false)
                             }
@@ -632,8 +635,8 @@ export function ClassForm() {
                         await cancelClassOccurrence(editingClass.id, match)
                         setCancelDate('')
                         toast.success('Occurrence marked as cancelled')
-                      } catch {
-                        toast.error('Failed to cancel')
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message.slice(0, 120) : 'Failed to cancel')
                       } finally {
                         setCancelling(false)
                       }

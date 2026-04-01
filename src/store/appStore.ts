@@ -527,10 +527,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { googleToken: token, spreadsheetId, scheduledClasses } = get()
     if (!token || !spreadsheetId) return
     const cls = scheduledClasses.find(c => c.id === classId)
-    if (!cls || cls.cancelledOccurrences.includes(occTs)) return
-    const updated: ScheduledClass = { ...cls, cancelledOccurrences: [...cls.cancelledOccurrences, occTs], updatedAt: Date.now() }
+    if (!cls) return
+    const existing = cls.cancelledOccurrences ?? []
+    if (existing.includes(occTs)) return
+    const updated: ScheduledClass = { ...cls, cancelledOccurrences: [...existing, occTs], updatedAt: Date.now() }
     await gsPutSchedule(token, spreadsheetId, updated)
-    set(s => ({ scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c) }))
+    set(s => ({
+      scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c),
+      editingClass: s.editingClass?.id === classId ? updated : s.editingClass,
+    }))
   },
 
   async uncancelClassOccurrence(classId, occTs) {
@@ -538,9 +543,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!token || !spreadsheetId) return
     const cls = scheduledClasses.find(c => c.id === classId)
     if (!cls) return
-    const updated: ScheduledClass = { ...cls, cancelledOccurrences: cls.cancelledOccurrences.filter(t => t !== occTs), updatedAt: Date.now() }
+    const existing = cls.cancelledOccurrences ?? []
+    const updated: ScheduledClass = { ...cls, cancelledOccurrences: existing.filter(t => t !== occTs), updatedAt: Date.now() }
     await gsPutSchedule(token, spreadsheetId, updated)
-    set(s => ({ scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c) }))
+    set(s => ({
+      scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c),
+      editingClass: s.editingClass?.id === classId ? updated : s.editingClass,
+    }))
   },
 
   openClassForm(cls) {
