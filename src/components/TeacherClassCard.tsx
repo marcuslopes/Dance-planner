@@ -40,6 +40,7 @@ function nextOccurrence(tc: TeacherClass): string | null {
     recurrence: tc.recurrence,
     googleCalendarEventId: tc.googleCalendarEventId,
     notes: tc.notes,
+    cancelledOccurrences: [],
     createdAt: tc.createdAt,
     updatedAt: tc.updatedAt,
   }

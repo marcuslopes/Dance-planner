@@ -102,6 +102,23 @@ export function ClassEventCard({ cls, pkg, onClick }: Props) {
           </span>
         </div>
       )}
+
+      {/* Cancelled occurrences badge */}
+      {cls.cancelledOccurrences?.length > 0 && (
+        <div style={{ marginTop: 2 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 11, fontWeight: 600,
+            background: 'rgba(244,63,94,0.12)', color: '#f43f5e',
+            borderRadius: 6, padding: '2px 7px',
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+            {cls.cancelledOccurrences.length === 1 ? '1 cancelled' : `${cls.cancelledOccurrences.length} cancelled`}
+          </span>
+        </div>
+      )}
     </button>
   )
 }

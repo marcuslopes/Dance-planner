@@ -108,6 +108,8 @@ interface AppState {
   addScheduledClass(data: Omit<ScheduledClass, 'id' | 'createdAt' | 'updatedAt' | 'googleCalendarEventId'>, addToCalendar: boolean): Promise<void>
   updateScheduledClass(id: string, patch: Partial<ScheduledClass>, syncCalendar: boolean): Promise<void>
   deleteScheduledClass(id: string): Promise<void>
+  cancelClassOccurrence(classId: string, occTs: number): Promise<void>
+  uncancelClassOccurrence(classId: string, occTs: number): Promise<void>
   openClassForm(cls?: ScheduledClass): void
   closeClassForm(): void
   setActiveTab(tab: 'packages' | 'schedule' | 'settings' | 'analytics' | 'teaching'): void
@@ -521,6 +523,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     set(s => ({ scheduledClasses: s.scheduledClasses.filter(c => c.id !== id) }))
   },
 
+  async cancelClassOccurrence(classId, occTs) {
+    const { googleToken: token, spreadsheetId, scheduledClasses } = get()
+    if (!token || !spreadsheetId) return
+    const cls = scheduledClasses.find(c => c.id === classId)
+    if (!cls || cls.cancelledOccurrences.includes(occTs)) return
+    const updated: ScheduledClass = { ...cls, cancelledOccurrences: [...cls.cancelledOccurrences, occTs], updatedAt: Date.now() }
+    await gsPutSchedule(token, spreadsheetId, updated)
+    set(s => ({ scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c) }))
+  },
+
+  async uncancelClassOccurrence(classId, occTs) {
+    const { googleToken: token, spreadsheetId, scheduledClasses } = get()
+    if (!token || !spreadsheetId) return
+    const cls = scheduledClasses.find(c => c.id === classId)
+    if (!cls) return
+    const updated: ScheduledClass = { ...cls, cancelledOccurrences: cls.cancelledOccurrences.filter(t => t !== occTs), updatedAt: Date.now() }
+    await gsPutSchedule(token, spreadsheetId, updated)
+    set(s => ({ scheduledClasses: s.scheduledClasses.map(c => c.id === classId ? updated : c) }))
+  },
+
   openClassForm(cls) {
     set({ isClassFormOpen: true, editingClass: cls ?? null })
   },
@@ -555,6 +577,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!cls.packageId) continue
       const occurrences = expandOccurrences(cls, now)
       for (const occTs of occurrences) {
+        if (cls.cancelledOccurrences?.includes(occTs)) continue
         const noteKey = `__auto__:${cls.id}:${occTs}`
         const alreadyExists = attendance.some(a => a.note === noteKey) ||
           newRecords.some(a => a.note === noteKey)
@@ -860,6 +883,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           location: data.location,
           notes: data.notes,
           recurrence: data.recurrence,
+          cancelledOccurrences: [],
         })
         toast.success('Added to Google Calendar')
       } catch (err) {
@@ -889,7 +913,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (syncCalendar && token) {
       try {
-        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence }
+        const calData = { title: updated.title, packageId: null as null, startTime: updated.startTime, endTime: updated.endTime, location: updated.location, notes: updated.notes, recurrence: updated.recurrence, cancelledOccurrences: [] as number[] }
         if (updated.googleCalendarEventId) {
           await gcUpdateEvent(token, updated.googleCalendarEventId, calData)
         } else {

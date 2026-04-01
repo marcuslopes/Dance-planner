@@ -126,6 +126,7 @@ export function ScheduleTab() {
               startTime: tc.startTime, endTime: tc.endTime,
               location: tc.location, recurrence: tc.recurrence,
               googleCalendarEventId: tc.googleCalendarEventId, notes: tc.notes,
+              cancelledOccurrences: [],
               createdAt: tc.createdAt, updatedAt: tc.updatedAt,
             }
             return expandOccurrences(asScheduled, lookahead)

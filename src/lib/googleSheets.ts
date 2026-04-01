@@ -334,6 +334,7 @@ function rowToSchedule(row: string[]): ScheduledClass {
     recurrence: row[6] ? JSON.parse(row[6]) : null,
     googleCalendarEventId: row[7] || null,
     notes: row[8] || null,
+    cancelledOccurrences: row[11] ? JSON.parse(row[11]) : [],
     createdAt: Number(row[9]),
     updatedAt: Number(row[10]),
   }
@@ -352,6 +353,7 @@ function scheduleToRow(cls: ScheduledClass): string[] {
     cls.notes ?? '',
     String(cls.createdAt),
     String(cls.updatedAt),
+    JSON.stringify(cls.cancelledOccurrences ?? []),
   ]
 }
 
@@ -361,7 +363,7 @@ export async function gsGetSchedule(token: string, spreadsheetId: string): Promi
 }
 
 export async function gsPutSchedule(token: string, spreadsheetId: string, cls: ScheduledClass): Promise<void> {
-  await upsertRow(token, spreadsheetId, 'schedule', 'K', scheduleToRow(cls), cls.id)
+  await upsertRow(token, spreadsheetId, 'schedule', 'L', scheduleToRow(cls), cls.id)
 }
 
 export async function gsDeleteSchedule(token: string, spreadsheetId: string, schedSheetId: number, id: string): Promise<void> {

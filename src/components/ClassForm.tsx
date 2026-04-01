@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
+import { format, startOfDay } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAppStore, classesUsed } from '../store/appStore'
+import { expandOccurrences } from '../lib/recurrence'
 import type { RecurrenceFrequency, RecurrenceRule, ScheduledClass } from '../types'
 
 const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -119,10 +120,14 @@ export function ClassForm() {
   const addScheduledClass = useAppStore(s => s.addScheduledClass)
   const updateScheduledClass = useAppStore(s => s.updateScheduledClass)
   const deleteScheduledClass = useAppStore(s => s.deleteScheduledClass)
+  const cancelClassOccurrence = useAppStore(s => s.cancelClassOccurrence)
+  const uncancelClassOccurrence = useAppStore(s => s.uncancelClassOccurrence)
 
   const [form, setForm] = useState<FormState>(() => initFormState(editingClass))
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [cancelDate, setCancelDate] = useState('')
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
@@ -188,6 +193,7 @@ export function ClassForm() {
         location: form.location.trim() || null,
         notes: form.notes.trim() || null,
         recurrence: buildRecurrence(),
+        cancelledOccurrences: editingClass?.cancelledOccurrences ?? [],
       }
 
       if (isEditing && editingClass) {
@@ -512,6 +518,144 @@ export function ClassForm() {
             }} />
           </button>
         </div>
+
+        {/* Cancelled occurrences (edit mode) */}
+        {isEditing && editingClass && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <span style={labelStyle}>Cancelled occurrences</span>
+
+            {/* Non-recurring: single toggle */}
+            {!editingClass.recurrence ? (
+              <button
+                type="button"
+                disabled={cancelling}
+                onClick={async () => {
+                  setCancelling(true)
+                  try {
+                    if (editingClass.cancelledOccurrences.includes(editingClass.startTime)) {
+                      await uncancelClassOccurrence(editingClass.id, editingClass.startTime)
+                      toast.success('Class restored')
+                    } else {
+                      await cancelClassOccurrence(editingClass.id, editingClass.startTime)
+                      toast.success('Class marked as cancelled')
+                    }
+                  } catch {
+                    toast.error('Failed to update')
+                  } finally {
+                    setCancelling(false)
+                  }
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 14px', borderRadius: 12,
+                  border: `1.5px solid ${editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--border)'}`,
+                  background: editingClass.cancelledOccurrences.includes(editingClass.startTime) ? 'rgba(244,63,94,0.08)' : 'var(--bg-elevated)',
+                  cursor: cancelling ? 'not-allowed' : 'pointer',
+                  opacity: cancelling ? 0.7 : 1,
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 600, color: editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--text-muted)' }}>
+                  {editingClass.cancelledOccurrences.includes(editingClass.startTime) ? 'This class was cancelled — tap to restore' : 'Mark this class as cancelled'}
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={editingClass.cancelledOccurrences.includes(editingClass.startTime) ? '#f43f5e' : 'var(--text-muted)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {editingClass.cancelledOccurrences.includes(editingClass.startTime)
+                    ? <><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0"/><path d="m9 12 2 2 4-4"/></>
+                    : <><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></>
+                  }
+                </svg>
+              </button>
+            ) : (
+              /* Recurring: date picker + list */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* List of cancelled dates */}
+                {editingClass.cancelledOccurrences.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[...editingClass.cancelledOccurrences].sort().map(ts => (
+                      <div key={ts} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '9px 12px', borderRadius: 10,
+                        background: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)',
+                      }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: '#f43f5e' }}>
+                          {format(new Date(ts), 'EEE, MMM d, yyyy')}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={cancelling}
+                          onClick={async () => {
+                            setCancelling(true)
+                            try {
+                              await uncancelClassOccurrence(editingClass.id, ts)
+                              toast.success('Occurrence restored')
+                            } catch {
+                              toast.error('Failed to restore')
+                            } finally {
+                              setCancelling(false)
+                            }
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#f43f5e', padding: 2, lineHeight: 1 }}
+                          title="Remove cancellation"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Date picker to add a new cancelled occurrence */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    type="date"
+                    style={{ ...inputStyle, flex: 1 }}
+                    value={cancelDate}
+                    onChange={e => setCancelDate(e.target.value)}
+                    max={format(new Date(), 'yyyy-MM-dd')}
+                  />
+                  <button
+                    type="button"
+                    disabled={!cancelDate || cancelling}
+                    onClick={async () => {
+                      if (!cancelDate) return
+                      const occTs = startOfDay(new Date(cancelDate)).getTime()
+                      // Verify this date is an actual occurrence of the class
+                      const validOccs = expandOccurrences(editingClass, Date.now() + 365 * 24 * 60 * 60 * 1000)
+                      const match = validOccs.find(t => startOfDay(new Date(t)).getTime() === occTs)
+                      if (!match) {
+                        toast.error('That date is not a scheduled occurrence of this class')
+                        return
+                      }
+                      setCancelling(true)
+                      try {
+                        await cancelClassOccurrence(editingClass.id, match)
+                        setCancelDate('')
+                        toast.success('Occurrence marked as cancelled')
+                      } catch {
+                        toast.error('Failed to cancel')
+                      } finally {
+                        setCancelling(false)
+                      }
+                    }}
+                    style={{
+                      padding: '11px 16px', borderRadius: 10, border: 'none',
+                      background: !cancelDate || cancelling ? 'var(--border)' : '#f43f5e',
+                      color: '#fff', fontSize: 13, fontWeight: 700,
+                      cursor: !cancelDate || cancelling ? 'not-allowed' : 'pointer',
+                      flexShrink: 0,
+                    }}
+                  >
+                    Cancel date
+                  </button>
+                </div>
+                <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)' }}>
+                  Pick a date that matches a scheduled occurrence to mark it as cancelled.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Delete button (edit mode) */}
         {isEditing && (
